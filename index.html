@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en-AU" data-theme="light">
+<head>
+<!--
+   ______                            __
+  / ____/___  ____ ___  ____  __  __/ /____  _____
+ / /   / __ \/ __ `__ \/ __ \/ / / / __/ _ \/ ___/
+/ /___/ /_/ / / / / / / /_/ / /_/ / /_/  __/ /
+\____/\____/_/ /_/ /_/ .___/\__,_/\__/\___/_/
+                    /_/
+        Created with Perplexity Computer
+        https://www.perplexity.ai/computer
+-->
+<meta name="generator" content="Perplexity Computer">
+<meta name="author" content="Perplexity Computer">
+<meta property="og:see_also" content="https://www.perplexity.ai/computer">
+<link rel="author" href="https://www.perplexity.ai/computer">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AU Family Dinner Planner</title>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="logo-area">
+        <svg class="logo-icon" viewBox="0 0 32 32" width="32" height="32" aria-label="AU Family Dinner Planner logo">
+          <circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="2"/>
+          <path d="M10 20 C10 14, 16 10, 16 10 C16 10, 22 14, 22 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="16" cy="12" r="2" fill="currentColor"/>
+          <path d="M12 22 L20 22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <h1 class="app-title">Dinner Planner</h1>
+      </div>
+      <div class="header-actions">
+        <button class="btn-icon" id="settingsBtn" aria-label="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+        <button class="btn-icon" id="themeToggle" data-theme-toggle aria-label="Toggle theme">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tab-nav" id="tabNav">
+    <div class="tab-scroll">
+      <button class="tab-btn active" data-tab="newFortnight">New Fortnight</button>
+      <button class="tab-btn" data-tab="storage">Storage</button>
+      <button class="tab-btn" data-tab="mealPlan">Meal Plan</button>
+      <button class="tab-btn" data-tab="recipes">Recipes</button>
+      <button class="tab-btn" data-tab="rateNotes">Rate &amp; Notes</button>
+      <button class="tab-btn" data-tab="pantry">Pantry</button>
+      <button class="tab-btn" data-tab="exports">Exports</button>
+      <button class="tab-btn" data-tab="woolies">Woolies Cart</button>
+    </div>
+  </nav>
+
+  <main class="app-main" id="appMain">
+    <!-- New Fortnight Tab -->
+    <section class="tab-panel active" id="panel-newFortnight">
+      <div class="panel-header">
+        <h2>Start a New Fortnight</h2>
+        <p class="subtitle">Enter your produce, meat, and leftovers to generate a meal plan.</p>
+      </div>
+      <div class="input-grid">
+        <div class="input-card">
+          <h3>🥬 Farmers Pick Delivery</h3>
+          <p class="input-hint">One item per line. Optional quantity: "2x broccoli", "500g beans", "1 bunch coriander"</p>
+          <textarea id="farmersPickInput" rows="8" placeholder="2x broccoli&#10;500g green beans&#10;1 bunch coriander&#10;punnet cherry tomatoes&#10;4x zucchini&#10;bag baby spinach&#10;1kg carrots&#10;head cauliflower"></textarea>
+        </div>
+        <div class="input-card">
+          <h3>🥩 Meat on Hand (Butcher Crowd)</h3>
+          <p class="input-hint">One item per line with weight or piece count.</p>
+          <textarea id="meatInput" rows="8" placeholder="1kg chicken thigh fillets&#10;500g beef mince&#10;8x chicken drumsticks&#10;600g pork loin steaks&#10;500g lamb mince&#10;4x salmon fillets"></textarea>
+        </div>
+        <div class="input-card">
+          <h3>♻️ Leftover Veg/Meat from Last Fortnight</h3>
+          <p class="input-hint">Items remaining from previous delivery.</p>
+          <textarea id="leftoversInput" rows="6" placeholder="3x potatoes&#10;1 sweet potato&#10;half bag spinach&#10;200g mushrooms"></textarea>
+        </div>
+        <div class="input-card">
+          <h3>🚫 Dietary Dislikes (Optional)</h3>
+          <p class="input-hint">Ingredients to deprioritise this fortnight.</p>
+          <textarea id="dislikesInput" rows="4" placeholder="eggplant&#10;beetroot"></textarea>
+        </div>
+      </div>
+      <div class="action-bar">
+        <button class="btn-primary" id="startFortnightBtn">Generate Fortnight Plan</button>
+        <button class="btn-secondary" id="loadSeedBtn">Load Sample Data</button>
+      </div>
+    </section>
+
+    <!-- Storage Tab -->
+    <section class="tab-panel" id="panel-storage">
+      <div class="panel-header">
+        <h2>Storage Guide</h2>
+        <p class="subtitle">Where to store your produce and what to use first.</p>
+      </div>
+      <div id="eatFirstBox" class="eat-first-box" style="display:none;">
+        <h3>🔴 Eat First (Most Perishable)</h3>
+        <div id="eatFirstList"></div>
+      </div>
+      <div class="table-wrap">
+        <table id="storageTable" class="data-table">
+          <thead>
+            <tr><th>Item</th><th>Location</th><th>How to Store</th><th>Expected Life</th><th>Notes</th></tr>
+          </thead>
+          <tbody id="storageBody"></tbody>
+        </table>
+      </div>
+      <p id="storageEmpty" class="empty-state">Enter your Farmers Pick delivery to see storage guidance.</p>
+    </section>
+
+    <!-- Meal Plan Tab -->
+    <section class="tab-panel" id="panel-mealPlan">
+      <div class="panel-header">
+        <h2>Fortnight Meal Plan</h2>
+        <p class="subtitle">9 dinners across 2 weeks. Each meal produces leftovers for 2 adult lunches.</p>
+      </div>
+      <div id="mealPlanContent">
+        <p class="empty-state">Generate a fortnight plan from the "New Fortnight" tab first.</p>
+      </div>
+    </section>
+
+    <!-- Recipes Tab -->
+    <section class="tab-panel" id="panel-recipes">
+      <div class="panel-header">
+        <h2>Recipes</h2>
+        <p class="subtitle">Full recipes with cook mode, toddler adjustments, and meat prep tips.</p>
+      </div>
+      <div id="recipesContent">
+        <p class="empty-state">Generate a fortnight plan to see recipes.</p>
+      </div>
+    </section>
+
+    <!-- Rate & Notes Tab -->
+    <section class="tab-panel" id="panel-rateNotes">
+      <div class="panel-header">
+        <h2>Rate &amp; Notes</h2>
+        <p class="subtitle">Your feedback shapes future meal plans.</p>
+      </div>
+      <div id="rateNotesContent">
+        <p class="empty-state">Cook a meal, then rate it here.</p>
+      </div>
+    </section>
+
+    <!-- Pantry Tab -->
+    <section class="tab-panel" id="panel-pantry">
+      <div class="panel-header">
+        <h2>Pantry Manager</h2>
+        <p class="subtitle">Track staples over time. Flags what you need to restock.</p>
+      </div>
+      <div class="pantry-actions">
+        <button class="btn-secondary" id="addPantryItemBtn">+ Add Item</button>
+      </div>
+      <div class="table-wrap">
+        <table id="pantryTable" class="data-table">
+          <thead>
+            <tr><th>Item</th><th>Category</th><th>Have?</th><th>Qty</th><th>Low?</th><th>Notes</th><th></th></tr>
+          </thead>
+          <tbody id="pantryBody"></tbody>
+        </table>
+      </div>
+      <div id="pantryAlerts" style="display:none;">
+        <div id="newStaplesBox" class="info-box"></div>
+        <div id="restockBox" class="warning-box"></div>
+      </div>
+    </section>
+
+    <!-- Exports Tab -->
+    <section class="tab-panel" id="panel-exports">
+      <div class="panel-header">
+        <h2>Exports</h2>
+        <p class="subtitle">Download shopping list or recipe pack as .docx files.</p>
+      </div>
+      <div id="exportsContent">
+        <div class="export-cards">
+          <div class="export-card">
+            <h3>🛒 Shopping List</h3>
+            <p>Formatted table with items, quantities, and store notes.</p>
+            <div id="shoppingListPreview" class="table-wrap"></div>
+            <button class="btn-primary" id="exportShoppingBtn" disabled>Export Shopping List (.docx)</button>
+          </div>
+          <div class="export-card">
+            <h3>📖 Recipe Pack</h3>
+            <p>All recipes with linked table of contents, toddler adjustments, and tips.</p>
+            <button class="btn-primary" id="exportRecipesBtn" disabled>Export All Recipes (.docx)</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Woolies Cart Assist Tab -->
+    <section class="tab-panel" id="panel-woolies">
+      <div class="panel-header">
+        <h2>Woolies Cart Assist</h2>
+        <p class="subtitle">Prepare your shopping list for Perplexity Computer to add to your Woolworths cart.</p>
+      </div>
+      <div id="wooliesContent">
+        <div class="woolies-section">
+          <h3>Plain Text Format</h3>
+          <pre id="wooliesPlainText" class="code-block">Generate a shopping list first.</pre>
+          <button class="btn-secondary" id="copyPlainBtn">Copy to Clipboard</button>
+        </div>
+        <div class="woolies-section">
+          <h3>JSON Format</h3>
+          <pre id="wooliesJSON" class="code-block">Generate a shopping list first.</pre>
+          <button class="btn-secondary" id="copyJSONBtn">Copy to Clipboard</button>
+        </div>
+        <div class="woolies-section">
+          <h3>Automation Prompt for Perplexity Computer</h3>
+          <pre id="wooliesPrompt" class="code-block prompt-block">Task: Add items to my Woolworths online cart, but DO NOT check out.
+Inputs: [shopping list pasted here]
+Rules:
+1) Open woolworths.com.au and prompt me to log in if needed.
+2) For each item: search, choose sensible default unless Notes specify, ask me to pick if multiple close matches, add quantity.
+3) If not found: add to a 'Could not add' list with closest matches and ask what to do.
+4) After all items: open cart and summarise added items, substitutions, missing items.
+5) Stop and wait for confirmation before any checkout step.</pre>
+          <button class="btn-secondary" id="copyPromptBtn">Copy Prompt to Clipboard</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal" style="display:none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button class="btn-icon modal-close" id="closeSettingsBtn" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-group">
+          <h3>Servings</h3>
+          <label>Default servings (min 4)
+            <input type="number" id="settingServings" min="4" value="4">
+          </label>
+        </div>
+        <div class="setting-group">
+          <h3>Leftover Targets</h3>
+          <label class="toggle-label">
+            <input type="checkbox" id="settingLeftoverOn" checked>
+            Leftover sufficiency calculator ON
+          </label>
+          <label>Adult dinner protein (g cooked)
+            <input type="number" id="settingAdultDinner" min="100" value="160">
+          </label>
+          <label>Toddler dinner protein (g cooked)
+            <input type="number" id="settingToddlerDinner" min="30" value="60">
+          </label>
+          <label>Adult lunch protein (g cooked)
+            <input type="number" id="settingAdultLunch" min="80" value="140">
+          </label>
+        </div>
+        <div class="setting-group">
+          <h3>Cooking</h3>
+          <label>Max cook time (minutes, capped at 60)
+            <input type="number" id="settingMaxTime" min="15" max="60" value="60">
+          </label>
+        </div>
+        <div class="setting-group">
+          <h3>Cuisine Preferences</h3>
+          <div class="cuisine-toggles" id="cuisineToggles"></div>
+        </div>
+        <div class="setting-group">
+          <h3>Safety Rules (Locked)</h3>
+          <label class="toggle-label locked">
+            <input type="checkbox" checked disabled>
+            Nut-free (always ON)
+          </label>
+          <label class="toggle-label locked">
+            <input type="checkbox" checked disabled>
+            Mexican max 2 per 14 days
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" id="saveSettingsBtn">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Pantry Item Modal -->
+  <div class="modal-overlay" id="pantryModal" style="display:none;">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Add Pantry Item</h2>
+        <button class="btn-icon modal-close" id="closePantryModal" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label>Item name <input type="text" id="pantryItemName" placeholder="Olive oil"></label>
+        <label>Category
+          <select id="pantryItemCat">
+            <option>Oil & Vinegar</option>
+            <option>Spices</option>
+            <option>Sauce & Condiment</option>
+            <option>Grain & Pasta</option>
+            <option>Canned Goods</option>
+            <option>Baking</option>
+            <option>Dairy</option>
+            <option>Other</option>
+          </select>
+        </label>
+        <label>Typical quantity <input type="text" id="pantryItemQty" placeholder="1 bottle"></label>
+        <label class="toggle-label">
+          <input type="checkbox" id="pantryItemHave" checked>
+          Have it?
+        </label>
+        <label>Notes <input type="text" id="pantryItemNotes" placeholder=""></label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" id="savePantryItemBtn">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cook Mode Modal -->
+  <div class="modal-overlay" id="cookModeModal" style="display:none;">
+    <div class="modal modal-lg cook-mode">
+      <div class="modal-header">
+        <h2 id="cookModeTitle">Cook Mode</h2>
+        <button class="btn-icon modal-close" id="closeCookMode" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body" id="cookModeBody"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <footer class="app-footer">
+    <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer">Created with Perplexity Computer</a>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
