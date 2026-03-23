@@ -1,35 +1,28 @@
 /* ========================================
 app.js — AU Family Dinner Planner
-v2.0 — Claude AI Recipe Generation
+v2.1 — AI-only generation, no seed fallback
 ======================================== */
 
-// — App State —
 let state = {
-settings: null,
-pantry: [],
-sessions: [],
-mealHistory: [],
-recipeLibrary: [],
-recipeFeedback: {},
-shoppingLists: [],
-currentSession: null,
-currentMealPlan: null,
-currentShoppingList: null
+settings: null, pantry: [], sessions: [], mealHistory: [],
+recipeLibrary: [], recipeFeedback: {}, shoppingLists: [],
+currentSession: null, currentMealPlan: null, currentShoppingList: null
 };
 
 // ============================================================
-// UTILITY FUNCTIONS
+// UTILITY
 // ============================================================
 
 function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
 
-function toast(message, type = ‘info’) {
+function toast(message, type) {
+type = type || ‘info’;
 const c = document.getElementById(‘toastContainer’);
 const t = document.createElement(‘div’);
-t.className = `toast ${type}`;
+t.className = ’toast ’ + type;
 t.textContent = message;
 c.appendChild(t);
-setTimeout(() => { t.style.opacity = ‘0’; setTimeout(() => t.remove(), 300); }, 3000);
+setTimeout(() => { t.style.opacity = ‘0’; setTimeout(() => t.remove(), 300); }, 3500);
 }
 
 const _mem = {};
@@ -66,54 +59,93 @@ return { qty: ‘’, item: line.toLowerCase() };
 
 function containsNuts(text) {
 const lower = text.toLowerCase();
-return NUT_BLACKLIST.some(nut => {
-const re = new RegExp(’\b’ + nut.replace(/[.*+?^${}()|[]\]/g, ‘\$&’) + ‘\b’, ‘i’);
-return re.test(lower);
-});
+return NUT_BLACKLIST.some(nut => new RegExp(’\b’ + nut.replace(/[.*+?^${}()|[]\]/g, ‘\$&’) + ‘\b’, ‘i’).test(lower));
 }
 
-function getDifficultyEmoji(d) {
-if (d === ‘easy’) return ‘🟢’;
-if (d === ‘medium’) return ‘🟡’;
-return ‘🔴’;
-}
-
-function getDifficultyLabel(d) {
-if (d === ‘easy’) return ‘Easy’;
-if (d === ‘medium’) return ‘Medium’;
-return ‘Complex’;
-}
+function getDifficultyEmoji(d) { return d === ‘easy’ ? ‘🟢’ : d === ‘medium’ ? ‘🟡’ : ‘🔴’; }
+function getDifficultyLabel(d) { return d === ‘easy’ ? ‘Easy’ : d === ‘medium’ ? ‘Medium’ : ‘Complex’; }
 
 function getYieldFactor(proteinName) {
 const lower = (proteinName || ‘’).toLowerCase();
-for (const [key, val] of Object.entries(YIELD_FACTORS)) {
-if (lower.includes(key)) return val;
-}
+for (const [key, val] of Object.entries(YIELD_FACTORS)) { if (lower.includes(key)) return val; }
 return YIELD_FACTORS.default;
 }
 
 // ============================================================
-// LOADING STATE
+// LOADING OVERLAY
 // ============================================================
 
 function showLoading(message) {
-message = message || ‘Claude is generating your meal plan\u2026’;
+message = message || ‘Claude is generating your meal plan…’;
 let overlay = document.getElementById(‘aiLoadingOverlay’);
 if (!overlay) {
 overlay = document.createElement(‘div’);
 overlay.id = ‘aiLoadingOverlay’;
-overlay.style.cssText = ‘position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;’;
-overlay.innerHTML = ‘<div style="background:var(--color-surface,#fff);border-radius:16px;padding:32px 40px;text-align:center;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.18);"><div style="font-size:2.5rem;margin-bottom:12px;">\uD83C\uDF73</div><div id="aiLoadingMsg" style="font-size:1rem;font-weight:600;color:var(--color-text,#1a1a1a);margin-bottom:8px;">’ + message + ‘</div><div style="font-size:0.85rem;color:var(--color-muted,#888);margin-bottom:20px;">This takes 15\u201325 seconds</div><div style="display:flex;gap:6px;justify-content:center;"><div style="width:10px;height:10px;border-radius:50%;background:var(--color-primary,#e07b39);animation:aiPulse 1.2s ease-in-out 0s infinite;"></div><div style="width:10px;height:10px;border-radius:50%;background:var(--color-primary,#e07b39);animation:aiPulse 1.2s ease-in-out 0.2s infinite;"></div><div style="width:10px;height:10px;border-radius:50%;background:var(--color-primary,#e07b39);animation:aiPulse 1.2s ease-in-out 0.4s infinite;"></div></div></div><style>@keyframes aiPulse{0%,80%,100%{transform:scale(0.6);opacity:0.5}40%{transform:scale(1);opacity:1}}</style>’;
+overlay.style.cssText = ‘position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;’;
+overlay.innerHTML = ` <div style="background:var(--color-surface,#fff);border-radius:16px;padding:32px 40px;text-align:center;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.2);"> <div style="font-size:2.5rem;margin-bottom:12px;">🍳</div> <div id="aiLoadingMsg" style="font-size:1rem;font-weight:600;color:var(--color-text,#1a1a1a);margin-bottom:8px;"></div> <div style="font-size:0.85rem;color:var(--color-muted,#888);margin-bottom:20px;">This takes 15–25 seconds</div> <div style="display:flex;gap:6px;justify-content:center;"> <div style="width:10px;height:10px;border-radius:50%;background:var(--color-primary,#e07b39);animation:aiPulse 1.2s ease-in-out 0s infinite;"></div> <div style="width:10px;height:10px;border-radius:50%;background:var(--color-primary,#e07b39);animation:aiPulse 1.2s ease-in-out 0.2s infinite;"></div> <div style="width:10px;height:10px;border-radius:50%;background:var(--color-primary,#e07b39);animation:aiPulse 1.2s ease-in-out 0.4s infinite;"></div> </div> </div> <style>@keyframes aiPulse{0%,80%,100%{transform:scale(0.6);opacity:0.5}40%{transform:scale(1);opacity:1}}</style>`;
 document.body.appendChild(overlay);
-} else {
+}
 document.getElementById(‘aiLoadingMsg’).textContent = message;
 overlay.style.display = ‘flex’;
-}
 }
 
 function hideLoading() {
 const overlay = document.getElementById(‘aiLoadingOverlay’);
 if (overlay) overlay.style.display = ‘none’;
+}
+
+// ============================================================
+// ERROR DISPLAY
+// Shown in place of the meal plan when AI generation fails.
+// Gives a clear explanation and a retry button — no silent fallback.
+// ============================================================
+
+function showGenerationError(context, err) {
+hideLoading();
+console.error(‘AI generation error:’, err);
+
+// Determine a user-friendly reason
+let reason = ‘An unexpected error occurred.’;
+if (err && err.message) {
+if (err.message.includes(‘Failed to fetch’) || err.message.includes(‘NetworkError’)) {
+reason = ‘Could not reach the Claude API. Check your internet connection and try again.’;
+} else if (err.message.includes(‘401’) || err.message.includes(‘403’)) {
+reason = ‘API authentication failed. The app may need to be reopened in Claude.ai.’;
+} else if (err.message.includes(‘429’)) {
+reason = ‘Claude is busy right now (rate limit reached). Wait a minute and try again.’;
+} else if (err.message.includes(‘500’) || err.message.includes(‘529’)) {
+reason = ‘Claude's servers returned an error. This is usually temporary — try again in a moment.’;
+} else if (err.message.includes(‘Too few recipes’)) {
+reason = ‘Claude returned an incomplete plan. This is rare — try generating again.’;
+} else if (err.message.includes(‘JSON’) || err.message.includes(‘parse’)) {
+reason = ‘Claude's response was in an unexpected format. Try generating again.’;
+} else {
+reason = err.message;
+}
+}
+
+const isRegenerate = context === ‘regenerate’;
+const retryFn = isRegenerate ? ‘regenerateUnlocked()’ : ‘startFortnight()’;
+const container = isRegenerate
+? document.getElementById(‘mealPlanContent’)
+: document.getElementById(‘mealPlanContent’);
+
+const errorHtml = ` <div style="background:var(--color-surface,#fff);border:2px solid #e53935;border-radius:12px;padding:28px 32px;max-width:520px;margin:32px auto;text-align:center;"> <div style="font-size:2rem;margin-bottom:12px;">⚠️</div> <h3 style="margin:0 0 10px;color:#c62828;font-size:1.1rem;">Claude couldn't generate your meal plan</h3> <p style="margin:0 0 20px;color:var(--color-muted,#666);font-size:0.9rem;line-height:1.5;">${reason}</p> <button class="btn-primary" onclick="${retryFn}" style="margin-right:8px;">🔄 Try Again</button> ${isRegenerate ? '' : '<button class="btn-secondary" onclick="switchTab(\'newFortnight\')">← Back to Inputs</button>'} </div>`;
+
+if (isRegenerate) {
+// Insert error above the existing plan so locked meals remain visible
+const existing = document.getElementById(‘mealPlanContent’);
+const errorDiv = document.createElement(‘div’);
+errorDiv.id = ‘generationErrorBox’;
+errorDiv.innerHTML = errorHtml;
+const old = document.getElementById(‘generationErrorBox’);
+if (old) old.remove();
+existing.insertAdjacentElement(‘beforebegin’, errorDiv);
+} else {
+// Replace the meal plan panel content entirely
+switchTab(‘mealPlan’);
+document.getElementById(‘mealPlanContent’).innerHTML = errorHtml;
+}
 }
 
 // ============================================================
@@ -159,7 +191,7 @@ ct.innerHTML = ‘’;
 CUISINES.forEach(c => {
 const label = document.createElement(‘label’);
 label.className = ‘toggle-label’;
-label.innerHTML = ‘<input type=“checkbox” class=“cuisine-toggle-check” data-cuisine=”’ + c + ’” ’ + (s.cuisinePrefs[c] ? ‘checked’ : ‘’) + ’> ’ + c;
+label.innerHTML = `<input type="checkbox" class="cuisine-toggle-check" data-cuisine="${c}" ${s.cuisinePrefs[c] ? 'checked' : ''}> ${c}`;
 ct.appendChild(label);
 });
 document.getElementById(‘settingsModal’).style.display = ‘flex’;
@@ -180,14 +212,14 @@ const rule = STORAGE_RULES[key] || STORAGE_RULES[‘default’];
 const isPerishable = HIGHLY_PERISHABLE.some(p => name.includes(p));
 if (isPerishable || (rule.perishDays && rule.perishDays <= 3)) eatFirst.push({ name, perishDays: rule.perishDays || 3 });
 const tr = document.createElement(‘tr’);
-tr.innerHTML = ‘<td><strong>’ + (parsed.qty ? parsed.qty + ’ ’ : ‘’) + name + ‘</strong></td><td>’ + rule.location + ‘</td><td>’ + rule.howToStore + ‘</td><td>’ + rule.life + ‘</td><td>’ + rule.notes + ‘</td>’;
+tr.innerHTML = `<td><strong>${parsed.qty ? parsed.qty + ' ' : ''}${name}</strong></td><td>${rule.location}</td><td>${rule.howToStore}</td><td>${rule.life}</td><td>${rule.notes}</td>`;
 tbody.appendChild(tr);
 });
 const efBox = document.getElementById(‘eatFirstBox’);
 const efList = document.getElementById(‘eatFirstList’);
 if (eatFirst.length > 0) {
 eatFirst.sort((a, b) => a.perishDays - b.perishDays);
-efList.innerHTML = eatFirst.slice(0, 4).map(e => ‘<span class="eat-first-item">’ + e.name + ’ (’ + e.perishDays + ‘d)</span>’).join(’’);
+efList.innerHTML = eatFirst.slice(0, 4).map(e => `<span class="eat-first-item">${e.name} (${e.perishDays}d)</span>`).join(’’);
 efBox.style.display = ‘block’;
 } else { efBox.style.display = ‘none’; }
 document.getElementById(‘storageEmpty’).style.display = items.length ? ‘none’ : ‘block’;
@@ -210,43 +242,109 @@ const yf = protein.yieldFactor || getYieldFactor(protein.name);
 const estimated = Math.round(rawGrams * yf);
 let pieceWarning = ‘’;
 if (protein.name && protein.name.toLowerCase().includes(‘drumstick’) && protein.pieces && protein.pieces < 6) {
-pieceWarning = ‘Drumstick count < 6. Consider 8\u201310.’;
+pieceWarning = ‘Drumstick count < 6. Consider 8–10.’;
 }
 if (estimated >= target) return { status: ‘Pass’, confidence: ‘High’, estimated, target, detail: ‘’ };
-if (estimated >= target * 0.8) return { status: ‘Pass’, confidence: ‘Medium’, estimated, target, detail: pieceWarning || ‘Close to target \u2014 portion generously’ };
+if (estimated >= target * 0.8) return { status: ‘Pass’, confidence: ‘Medium’, estimated, target, detail: pieceWarning || ‘Close to target — portion generously’ };
 const recommendedRaw = Math.round((target / yf) * 1.1);
 return {
 status: ‘Risk’, confidence: ‘Low’, estimated, target,
-detail: pieceWarning || ’Yield from ’ + rawGrams + ’g raw \u00d7 ’ + yf + ’ = ~’ + estimated + ‘g cooked’,
+detail: pieceWarning || `Yield from ${rawGrams}g raw × ${yf} = ~${estimated}g cooked`,
 fixes: [
-{ label: ’Increase ’ + protein.name + ’ to ’ + recommendedRaw + ‘g raw’, newRaw: recommendedRaw },
+{ label: `Increase ${protein.name} to ${recommendedRaw}g raw`, newRaw: recommendedRaw },
 { label: ‘Add chickpeas/lentils as high-satiety side’, addSide: true }
 ]
 };
 }
 
 // ============================================================
-// AI RECIPE GENERATION — SYSTEM PROMPT
+// AI — SYSTEM PROMPT
 // ============================================================
 
 function buildSystemPrompt() {
-return ‘You are the recipe generation AI for an Australian family dinner planner app. You create original, delicious, varied dinner recipes each fortnight.\n\nFAMILY PROFILE:\n- 2 adults + 1 toddler (2 years old). All eat the same meal with minor adjustments.\n- Based in Australia. Use Australian ingredient names and measurements (grams, kg, ml, cups, tbsp).\n- One adult has a severe NUT INTOLERANCE. Absolutely NO nuts or nut products of any kind.\n- Cook is above-average. Comfortable with brining, deglazing, rendering, velveting, tempering spices. Explain less-common techniques but not basics.\n\nABSOLUTE NUT BLACKLIST:\nalmonds, cashews, walnuts, pistachios, peanuts, pecans, macadamias, hazelnuts, pine nuts, brazil nuts, peanut butter, almond butter, cashew butter, hazelnut spread, Nutella, peanut oil, groundnut oil, almond meal, almond flour, satay sauce, satay, praline, marzipan, nougat, frangipane, nut milks, almond milk, cashew milk, traditional pesto, dukkah\n\nHOW THEY COOK:\n- 4\u20135 dinners per week, serving 4 (dinner + next-day leftovers for 2 adult lunches)\n- Max cook time: 60 minutes\n- Difficulty mix: 2 complex meals (45\u201360 min), 2\u20133 easy/medium (20\u201340 min)\n- Variety is key \u2014 rotate cuisines, proteins, cooking styles\n\nCUISINE PREFERENCES: Asian, Mediterranean, Italian, Australian/BBQ, Thai, Japanese, Indian, Middle Eastern, Greek, Korean, French\nRESTRICTION: Mexican cuisine maximum ONCE per fortnight\n\nPROTEIN QUANTITIES (for 4 servings with leftovers):\n- Chicken thigh fillets: 900g\u20131kg\n- Chicken breast: 800g (must brine or pound)\n- Chicken drumsticks: 10\u201312 pieces\n- Beef/lamb/pork mince: 800g\n- Beef steak: 700\u2013800g\n- Pork loin steaks: 600\u2013700g (4 pieces)\n- Salmon/fish fillets: 4 \u00d7 180\u2013200g\n- Prawns: 800g\u20131kg\n\nMANDATORY SECTIONS IN EVERY RECIPE:\n1. meatTip: A specific meat preparation technique with times, ratios, temps. Examples: brining chicken (1 tbsp salt per 2 cups water, 20\u201330 min), salting steak uncovered in fridge, velveting (cornflour + soy + oil), scoring drumsticks, tempering fish. NEVER generic. NEVER skip.\n2. toddlerAdjust: Practical mid-cook adjustment. Separate portion BEFORE adding chilli/fish sauce/heavy salt. Easy to do without a separate meal. Include texture/size tips for a 2-year-old.\n3. tips: 1\u20133 genuine chef-level tricks that elevate the dish. Not generic like “season to taste”.\n4. leftoverHandling: Creative suggestion for tomorrow's lunch. New format (wrap, bowl, salad), quick transformation, or added sauce.\n\nCHICKEN BREAST RULE: Always include brining (20\u201330 min, 1 tbsp salt per 2 cups cold water) OR pounding to even thickness OR butterflying. State this in meatTip. Or suggest thighs instead.\n\nPERISHABILITY: Week 1 Mon/Tue meals should use the most perishable ingredients: baby spinach, fresh herbs (coriander, basil), mushrooms, corn, asparagus. Later in the week: broccoli, zucchini, capsicum, cauliflower, carrots.\n\nOUTPUT FORMAT:\nRespond with ONLY a valid JSON array. No preamble, no explanation, no markdown \u2014 just raw JSON starting with [ and ending with ].\n\nEach item must use this schema:\n{\n  “title”: “Recipe Name”,\n  “cuisine”: “one of: Italian|Asian|Mexican|Mediterranean|Indian|Thai|Japanese|Middle Eastern|Australian/BBQ|Greek|Korean|French”,\n  “difficulty”: “easy|medium|complex”,\n  “cookTime”: 35,\n  “primaryProtein”: {\n    “name”: “chicken thigh fillets”,\n    “rawGrams”: 900,\n    “pieces”: null\n  },\n  “ingredients”: [“900g chicken thigh fillets, sliced”, “2 tbsp soy sauce”, “…”],\n  “steps”: [“Full instruction for step 1.”, “Full instruction for step 2.”],\n  “meatTip”: “Specific technique with times and ratios.”,\n  “toddlerAdjust”: “Practical mid-cook adjustment for a 2-year-old.”,\n  “tips”: “Chef-level tricks to elevate the dish.”,\n  “leftoverHandling”: “Creative next-day lunch idea.”\n}\n\nFor “pieces”: use an integer for drumsticks/steaks/fillets, null for mince or sliced meat.\nIngredients must include quantities (e.g. “900g chicken thigh fillets, sliced” not just “chicken”).’;
+return `You are the recipe generation AI for an Australian family dinner planner app. You create original, delicious, varied dinner recipes each fortnight.
+
+FAMILY PROFILE:
+
+- 2 adults + 1 toddler (2 years old). All eat the same meal with minor adjustments.
+- Based in Australia. Use Australian ingredient names and measurements (grams, kg, ml, cups, tbsp).
+- One adult has a severe NUT INTOLERANCE. Absolutely NO nuts or nut products of any kind.
+- Cook is above-average. Comfortable with brining, deglazing, rendering, velveting, tempering spices. Explain less-common techniques but not basics.
+
+ABSOLUTE NUT BLACKLIST — never use any of these:
+almonds, cashews, walnuts, pistachios, peanuts, pecans, macadamias, hazelnuts, pine nuts, brazil nuts, peanut butter, almond butter, cashew butter, hazelnut spread, Nutella, peanut oil, groundnut oil, almond meal, almond flour, satay sauce, satay, praline, marzipan, nougat, frangipane, nut milks, almond milk, cashew milk, traditional pesto, dukkah
+
+HOW THEY COOK:
+
+- 4–5 dinners per week, serving 4 (dinner for 2 adults + toddler, with leftovers for 2 adult lunches next day)
+- Max cook time: 60 minutes
+- Difficulty mix per week: 2 complex meals (45–60 min), 2–3 easy/medium (20–40 min)
+- Variety is key — rotate cuisines, proteins, cooking styles
+
+CUISINE PREFERENCES: Asian, Mediterranean, Italian, Australian/BBQ, Thai, Japanese, Indian, Middle Eastern, Greek, Korean, French
+RESTRICTION: Mexican cuisine maximum ONCE per fortnight
+
+PROTEIN QUANTITIES for 4 servings with leftovers:
+
+- Chicken thigh fillets: 900g–1kg
+- Chicken breast: 800g (must brine or pound — see below)
+- Chicken drumsticks: 10–12 pieces
+- Beef/lamb/pork mince: 800g
+- Beef steak: 700–800g
+- Pork loin steaks: 600–700g (4 pieces)
+- Salmon/fish fillets: 4 × 180–200g
+- Prawns: 800g–1kg
+
+MANDATORY SECTIONS IN EVERY RECIPE:
+
+1. meatTip: Specific meat preparation technique with times, ratios, temps. E.g. brining (1 tbsp salt per 2 cups water, 20–30 min), salting steak uncovered in fridge overnight, velveting (1 tsp cornflour + 1 tsp soy + 1 tsp oil, 10 min), scoring drumsticks. NEVER generic. NEVER skip.
+1. toddlerAdjust: Practical mid-cook adjustment. Separate portion BEFORE adding chilli/fish sauce/heavy salt. Easy without making a separate meal. Include texture and size tips for a 2-year-old.
+1. tips: 1–3 genuine chef-level tricks that elevate the dish. Not generic advice.
+1. leftoverHandling: Creative next-day lunch idea — new format (wrap, bowl, salad), quick transformation, or added sauce.
+
+CHICKEN BREAST RULE: Always include brining (20–30 min, 1 tbsp salt per 2 cups cold water) OR pounding to even thickness OR butterflying. State this in meatTip. Or suggest thighs instead.
+
+PERISHABILITY: Week 1 Mon/Tue meals should use most perishable ingredients first: baby spinach, fresh herbs (coriander, basil), mushrooms, corn, asparagus, bean sprouts. Later in the week: broccoli, zucchini, capsicum, cauliflower, carrots.
+
+OUTPUT FORMAT:
+Respond with ONLY a valid JSON array. No preamble, no explanation, no markdown fences — just raw JSON starting with [ and ending with ].
+
+Each recipe must follow this exact schema:
+{
+“title”: “Recipe Name”,
+“cuisine”: “Italian|Asian|Mexican|Mediterranean|Indian|Thai|Japanese|Middle Eastern|Australian/BBQ|Greek|Korean|French”,
+“difficulty”: “easy|medium|complex”,
+“cookTime”: 35,
+“primaryProtein”: {
+“name”: “chicken thigh fillets”,
+“rawGrams”: 900,
+“pieces”: null
+},
+“ingredients”: [“900g chicken thigh fillets, sliced”, “2 tbsp soy sauce”, “…”],
+“steps”: [“Full instruction for step 1.”, “Full instruction for step 2.”],
+“meatTip”: “Specific technique with times and ratios.”,
+“toddlerAdjust”: “Practical mid-cook adjustment for a 2-year-old.”,
+“tips”: “Chef-level tricks to elevate the dish.”,
+“leftoverHandling”: “Creative next-day lunch idea.”
+}
+
+pieces: integer for drumsticks/steaks/fillets, null for mince or sliced meat.
+Ingredients must include quantities (“900g chicken thigh fillets, sliced” not just “chicken”).`;
 }
 
 // ============================================================
-// AI RECIPE GENERATION — USER PROMPT
+// AI — USER PROMPT
 // ============================================================
 
 function buildUserPrompt(delivery, meat, leftovers, dislikes, slotsNeeded, lockedTitles) {
 const s = state.settings;
-const meatLines = meat.length ? meat.map(m => ’  - ’ + (m.qty ? m.qty + ’ ’ : ‘’) + m.item).join(’\n’) : ’  (none entered)’;
-const produceLines = delivery.length ? delivery.map(d => ’  - ’ + (d.qty ? d.qty + ’ ’ : ‘’) + d.item).join(’\n’) : ’  (none entered)’;
-const leftoverLines = leftovers.length ? leftovers.map(l => ’  - ’ + (l.qty ? l.qty + ’ ’ : ‘’) + l.item).join(’\n’) : ’  (none)’;
-const dislikeText = dislikes.trim() || ‘None’;
+const meatLines = meat.length ? meat.map(m => `  - ${m.qty ? m.qty + ' ' : ''}${m.item}`).join(’\n’) : ’  (none entered)’;
+const produceLines = delivery.length ? delivery.map(d => `  - ${d.qty ? d.qty + ' ' : ''}${d.item}`).join(’\n’) : ’  (none entered)’;
+const leftoverLines = leftovers.length ? leftovers.map(l => `  - ${l.qty ? l.qty + ' ' : ''}${l.item}`).join(’\n’) : ’  (none)’;
 const pantryHave = state.pantry.filter(p => p.have).map(p => p.item).join(’, ‘) || ‘None recorded’;
 const pantryMissing = state.pantry.filter(p => !p.have).map(p => p.item).join(’, ’) || ‘None’;
 
-// Build ratings feedback summary
+// Ratings & feedback
 const feedbackLines = [];
 const allKnownMeals = [
 …(state.currentMealPlan ? […(state.currentMealPlan.week1 || []), …(state.currentMealPlan.week2 || [])] : []),
@@ -259,43 +357,73 @@ seenIds.add(meal.id);
 const fb = state.recipeFeedback[meal.id];
 if (!fb) return;
 const title = fb.title || meal.title || meal.id;
-if (fb.blacklisted || fb.rating === 1) { feedbackLines.push(’  \u274c NEVER REPEAT: “’ + title + ‘” \u2014 blacklisted or 1 star’); return; }
+if (fb.blacklisted || fb.rating === 1) { feedbackLines.push(`  ❌ NEVER REPEAT: "${title}" — blacklisted or 1 star`); return; }
 const lines = [];
-if (fb.rating >= 4) lines.push(’rated ’ + fb.rating + ‘/5 \u2b50 \u2014 rotate back in every 6\u20138 weeks’);
-else if (fb.rating === 2 || fb.rating === 3) lines.push(‘rated ’ + fb.rating + ‘/5 \u2014 not a favourite, skip for now’);
+if (fb.rating >= 4) lines.push(`rated ${fb.rating}/5 ⭐ — rotate back in every 6–8 weeks`);
+else if (fb.rating === 2 || fb.rating === 3) lines.push(`rated ${fb.rating}/5 — not a favourite, skip for now`);
 if (fb.moreMeat) lines.push(‘needs more protein next time’);
-if (fb.lessSalt) lines.push(‘was too salty \u2014 reduce sodium’);
-if (fb.lessSpicy) lines.push(‘too spicy \u2014 reduce chilli’);
+if (fb.lessSalt) lines.push(‘was too salty — reduce sodium’);
+if (fb.lessSpicy) lines.push(‘was too spicy — reduce chilli’);
 if (fb.moreSpicy) lines.push(‘wanted more heat’);
-if (fb.excludeIngredients && fb.excludeIngredients.length) lines.push(‘exclude: ’ + fb.excludeIngredients.join(’, ‘));
-if (fb.notes) lines.push(‘cook note: “’ + fb.notes + ‘”’);
-if (lines.length) feedbackLines.push(’  \uD83D\uDCDD “’ + title + ‘”: ’ + lines.join(’; ’));
+if (fb.excludeIngredients && fb.excludeIngredients.length) lines.push(`exclude: ${fb.excludeIngredients.join(', ')}`);
+if (fb.notes) lines.push(`cook note: "${fb.notes}"`);
+if (lines.length) feedbackLines.push(`  📝 "${title}": ${lines.join('; ')}`);
 });
 
-// Cuisine rotation check
+// Cuisine rotation
 const recentCuisines = state.mealHistory.slice(-18).map(m => m.cuisine).filter(Boolean);
 const cuisineCounts = recentCuisines.reduce((a, c) => { a[c] = (a[c] || 0) + 1; return a; }, {});
 const overused = Object.entries(cuisineCounts).filter(([, v]) => v >= 3).map(([k]) => k);
 
 const mexicanRecent = state.mealHistory.filter(m => m.mexicanFlag && (Date.now() - m.date) < 14 * 24 * 60 * 60 * 1000).length;
 const mexicanStatus = mexicanRecent >= (s.mexicanMax || 2)
-? ‘Mexican limit reached \u2014 do NOT include Mexican.’
-: mexicanRecent === 1 ? ‘One Mexican already used \u2014 max one more allowed.’
+? ‘Mexican limit reached — do NOT include Mexican.’
+: mexicanRecent === 1 ? ‘One Mexican used this fortnight — max one more allowed.’
 : ‘Mexican allowed (max 1, only if it fits naturally).’;
 
-const isRegen = slotsNeeded < 9;
 const lockedText = lockedTitles && lockedTitles.length
-? ‘Already locked in \u2014 DO NOT duplicate these:\n’ + lockedTitles.map(t => ’  - ’ + t).join(’\n’)
-: ‘’;
+? `\nAlready locked in — DO NOT duplicate these:\n${lockedTitles.map(t => `  - ${t}`).join('\n')}` : ‘’;
 
-return (isRegen
-? ‘Generate ’ + slotsNeeded + ’ new dinner recipe’ + (slotsNeeded > 1 ? ‘s’ : ‘’) + ’ (JSON array of exactly ’ + slotsNeeded + ’ item’ + (slotsNeeded > 1 ? ‘s’ : ‘’) + ‘).\nAim for variety in difficulty and cuisine.’
-: ‘Generate a full fortnight meal plan: a JSON array of exactly 9 dinner recipes.\n\nWeek structure:\n- Recipes 1\u20135: Week 1 (Mon\u2013Fri). 2 complex, 3 easy/medium. Interleave: easy, complex, easy, complex, easy.\n- Recipes 6\u20139: Week 2 (Mon\u2013Thu). 2 complex, 2 easy/medium. Interleave: easy, complex, easy, complex.\n- Week 1 Mon/Tue meals: use most perishable ingredients first (spinach, herbs, mushrooms).’
-) + ‘\n\nPROTEINS AVAILABLE \u2014 ONLY use proteins from this list:\n’ + meatLines + ‘\n\nPRODUCE AVAILABLE \u2014 use as much as possible across the plan:\n’ + produceLines + ‘\n\nLEFTOVER PRODUCE (use these first \u2014 they need to go):\n’ + leftoverLines + ‘\n\nINGREDIENTS TO DEPRIORITISE (dislikes):\n’ + dislikeText + ‘\n\nPANTRY ON HAND (don't add to shopping list):\n’ + pantryHave + ‘\n\nPANTRY NOT STOCKED:\n’ + pantryMissing + ‘\n\nMEXICAN STATUS: ’ + mexicanStatus + ‘\n’ + (overused.length ? ‘\nCUISINE ROTATION: Used a lot recently \u2014 use sparingly: ’ + overused.join(’, ‘) + ‘.\n’ : ‘’) + ‘\nRATINGS & FEEDBACK (respect these):\n’ + (feedbackLines.length ? feedbackLines.join(’\n’) : ’  No ratings yet.’) + ‘\n’ + (lockedText ? ‘\n’ + lockedText + ‘\n’ : ‘’) + ‘\nNow output the JSON array of ’ + slotsNeeded + ’ recipes. ONLY valid JSON, starting with [, ending with ]. No other text.’;
+const isRegen = slotsNeeded < 9;
+
+return `${isRegen ? `Generate ${slotsNeeded} new dinner recipe${slotsNeeded > 1 ? ‘s’ : ‘’} — a JSON array of exactly ${slotsNeeded} item${slotsNeeded > 1 ? ‘s’ : ‘’}. Aim for variety in difficulty and cuisine.`:`Generate a full fortnight meal plan — a JSON array of exactly 9 dinner recipes.
+
+Week structure:
+
+- Recipes 1–5: Week 1 (Mon–Fri). 2 complex, 3 easy/medium. Interleave: easy, complex, easy, complex, easy.
+- Recipes 6–9: Week 2 (Mon–Thu). 2 complex, 2 easy/medium. Interleave: easy, complex, easy, complex.
+- Week 1 Mon/Tue: use most perishable ingredients first (spinach, herbs, mushrooms).`}
+
+PROTEINS AVAILABLE — ONLY use proteins from this list:
+${meatLines}
+
+PRODUCE AVAILABLE — use as much as possible across the plan:
+${produceLines}
+
+LEFTOVER PRODUCE (use these first — they need to go):
+${leftoverLines}
+
+INGREDIENTS TO DEPRIORITISE (dislikes):
+${dislikes.trim() || ‘None’}
+
+PANTRY ON HAND (do not add to shopping list):
+${pantryHave}
+
+PANTRY NOT STOCKED:
+${pantryMissing}
+
+MEXICAN STATUS: ${mexicanStatus}
+${overused.length ? `CUISINE ROTATION: Used heavily recently — use sparingly: ${overused.join(', ')}.` : ‘’}
+
+RATINGS & FEEDBACK — respect these when choosing and adjusting recipes:
+${feedbackLines.length ? feedbackLines.join(’\n’) : ’  No ratings yet — fresh start.’}
+${lockedText}
+
+Output the JSON array of ${slotsNeeded} recipes. ONLY valid JSON starting with [ and ending with ]. No other text.`;
 }
 
 // ============================================================
-// AI RECIPE GENERATION — API CALL
+// AI — API CALL
 // ============================================================
 
 async function callClaudeAPI(systemPrompt, userPrompt) {
@@ -309,7 +437,7 @@ system: systemPrompt,
 messages: [{ role: ‘user’, content: userPrompt }]
 })
 });
-if (!response.ok) throw new Error(‘API error ’ + response.status + ‘: ’ + await response.text());
+if (!response.ok) throw new Error(`API error ${response.status}: ${await response.text()}`);
 const data = await response.json();
 const rawText = data.content.filter(b => b.type === ‘text’).map(b => b.text).join(’’);
 const clean = rawText.replace(/^`json\s*/i, '').replace(/`\s*$/i, ‘’).trim();
@@ -317,25 +445,27 @@ return JSON.parse(clean);
 }
 
 // ============================================================
-// AI RECIPE GENERATION — PARSE & NORMALISE
+// AI — PARSE & NORMALISE RECIPES
 // ============================================================
 
 function parseAIRecipes(rawArray) {
 return rawArray.map((r, i) => {
-const id = ‘ai_’ + generateId();
 const protein = r.primaryProtein || {};
-const yieldFactor = getYieldFactor(protein.name || ‘’);
 return {
-id,
-title: r.title || ’Recipe ’ + (i + 1),
+id: ‘ai_’ + generateId(),
+title: r.title || `Recipe ${i + 1}`,
 cuisine: r.cuisine || ‘Mediterranean’,
 difficulty: r.difficulty || ‘medium’,
 cookTime: parseInt(r.cookTime) || 40,
-primaryProtein: { name: protein.name || ‘’, rawGrams: parseInt(protein.rawGrams) || 0, pieces: protein.pieces || null, yieldFactor },
+primaryProtein: {
+name: protein.name || ‘’,
+rawGrams: parseInt(protein.rawGrams) || 0,
+pieces: protein.pieces || null,
+yieldFactor: getYieldFactor(protein.name || ‘’)
+},
 ingredients: Array.isArray(r.ingredients) ? r.ingredients : [],
 steps: Array.isArray(r.steps) ? r.steps : [],
-stepIngredients: [],
-timers: [],
+stepIngredients: [], timers: [],
 meatTip: r.meatTip || ‘’,
 toddlerAdjust: r.toddlerAdjust || ‘’,
 tips: r.tips || ‘’,
@@ -346,75 +476,17 @@ _aiGenerated: true
 }
 
 // ============================================================
-// MEAL PLAN GENERATOR — AI-POWERED
+// AI — GENERATE FULL PLAN
 // ============================================================
 
 async function generateMealPlanWithAI(delivery, meat, leftovers, dislikes) {
 const rawRecipes = await callClaudeAPI(buildSystemPrompt(), buildUserPrompt(delivery, meat, leftovers, dislikes, 9, []));
 const recipes = parseAIRecipes(rawRecipes);
-if (recipes.length < 5) throw new Error(‘Too few recipes returned’);
-const dayNames1 = [‘Mon’, ‘Tue’, ‘Wed’, ‘Thu’, ‘Fri’];
-const dayNames2 = [‘Mon’, ‘Tue’, ‘Wed’, ‘Thu’];
-return {
-week1: recipes.slice(0, 5).map((m, i) => { m._day = dayNames1[i]; m._week = 1; m._locked = false; m._sufficiency = calcLeftoverSufficiency(m); return m; }),
-week2: recipes.slice(5, 9).map((m, i) => { m._day = dayNames2[i]; m._week = 2; m._locked = false; m._sufficiency = calcLeftoverSufficiency(m); return m; })
-};
-}
-
-// ============================================================
-// FALLBACK — SEED-BASED GENERATOR (used if API fails)
-// ============================================================
-
-function getMexicanCount14Days() {
-return state.mealHistory.filter(m => m.mexicanFlag && (Date.now() - m.date) < 14 * 24 * 60 * 60 * 1000).length;
-}
-
-function isBlacklisted(recipeId) { const fb = state.recipeFeedback[recipeId]; return fb && fb.blacklisted; }
-function getRecipePriority(recipe) { const fb = state.recipeFeedback[recipe.id]; if (!fb) return 3; if (fb.blacklisted) return 0; return fb.rating || 3; }
-
-function generateMealPlanFallback(deliveryItems, meatItems, leftoverItems, dislikes) {
-let pool = […SEED_RECIPES, …state.recipeLibrary.filter(r => !SEED_RECIPES.find(s => s.id === r.id))];
-pool = pool.filter(r => !isBlacklisted(r.id) && !containsNuts(r.ingredients.join(’ ‘)) && r.cookTime <= state.settings.maxTime && state.settings.cuisinePrefs[r.cuisine]);
-if (meatItems && meatItems.length > 0) {
-const availMeat = meatItems.map(m => m.item.toLowerCase());
-const filtered = pool.filter(r => {
-if (!r.primaryProtein || !r.primaryProtein.name) return true;
-const pw = r.primaryProtein.name.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-return availMeat.some(am => { const aw = am.split(/\s+/).filter(w => w.length > 3); return pw.some(p => aw.some(a => p === a || p.startsWith(a) || a.startsWith(p))); });
-});
-if (filtered.length >= 4) pool = filtered;
-}
-const dislikeList = (dislikes || ‘’).split(’\n’).map(d => d.trim().toLowerCase()).filter(Boolean);
-pool.forEach(r => {
-r._score = getRecipePriority(r);
-const ing = r.ingredients.join(’ ’).toLowerCase();
-dislikeList.forEach(d => { if (ing.includes(d)) r._score -= 1; });
-[…deliveryItems, …leftoverItems].forEach(i => { r.ingredients.forEach(ig => { if (ig.toLowerCase().includes(i.item)) r._score += 0.5; }); });
-});
-pool.sort((a, b) => b._score - a._score);
-const used = new Set();
-let mxCount = getMexicanCount14Days();
-function pick(difficulty) {
-for (const r of pool) {
-if (used.has(r.id)) continue;
-if (difficulty === ‘complex’ && r.difficulty !== ‘complex’) continue;
-if (difficulty === ‘easy/medium’ && r.difficulty === ‘complex’) continue;
-if (r.cuisine === ‘Mexican’ && mxCount >= state.settings.mexicanMax) continue;
-used.add(r.id); if (r.cuisine === ‘Mexican’) mxCount++; return { …r };
-}
-for (const r of pool) {
-if (used.has(r.id)) continue;
-if (r.cuisine === ‘Mexican’ && mxCount >= state.settings.mexicanMax) continue;
-used.add(r.id); if (r.cuisine === ‘Mexican’) mxCount++; return { …r };
-}
-return null;
-}
-const w1 = [pick(‘easy/medium’), pick(‘complex’), pick(‘easy/medium’), pick(‘complex’), pick(‘easy/medium’)];
-const w2 = [pick(‘easy/medium’), pick(‘complex’), pick(‘easy/medium’), pick(‘complex’)];
+if (recipes.length < 5) throw new Error(’Too few recipes returned — Claude returned ’ + recipes.length);
 const d1 = [‘Mon’,‘Tue’,‘Wed’,‘Thu’,‘Fri’], d2 = [‘Mon’,‘Tue’,‘Wed’,‘Thu’];
 return {
-week1: w1.filter(Boolean).map((m, i) => { m._day = d1[i]; m._week = 1; m._locked = false; m._sufficiency = calcLeftoverSufficiency(m); return m; }),
-week2: w2.filter(Boolean).map((m, i) => { m._day = d2[i]; m._week = 2; m._locked = false; m._sufficiency = calcLeftoverSufficiency(m); return m; })
+week1: recipes.slice(0, 5).map((m, i) => { m._day = d1[i]; m._week = 1; m._locked = false; m._sufficiency = calcLeftoverSufficiency(m); return m; }),
+week2: recipes.slice(5, 9).map((m, i) => { m._day = d2[i]; m._week = 2; m._locked = false; m._sufficiency = calcLeftoverSufficiency(m); return m; })
 };
 }
 
@@ -426,37 +498,31 @@ function renderMealPlan() {
 const plan = state.currentMealPlan;
 const container = document.getElementById(‘mealPlanContent’);
 if (!plan) { container.innerHTML = ‘<p class="empty-state">Generate a fortnight plan from the “New Fortnight” tab first.</p>’; return; }
+
+// Clear any previous error box
+const errorBox = document.getElementById(‘generationErrorBox’);
+if (errorBox) errorBox.remove();
+
 let html = ‘’;
 function renderWeek(meals, weekNum) {
-html += ‘<div class="week-section"><div class="week-title">Week ’ + weekNum + ’ \u2014 ’ + meals.length + ’ Dinners</div><div class="meal-cards">’;
+html += `<div class="week-section"><div class="week-title">Week ${weekNum} — ${meals.length} Dinners</div><div class="meal-cards">`;
 meals.forEach((meal, idx) => {
 if (!meal) return;
 const suf = meal._sufficiency || {};
 const sufClass = suf.status === ‘Pass’ ? ‘leftover-pass’ : ‘leftover-risk’;
-const sufIcon = suf.status === ‘Pass’ ? ‘\u2705’ : ‘\u26a0\ufe0f’;
+const sufIcon = suf.status === ‘Pass’ ? ‘✅’ : ‘⚠️’;
 let sufDetail = ‘’;
 if (suf.status === ‘Risk’ && suf.fixes) {
-sufDetail = ‘<div class="risk-detail">~’ + suf.estimated + ‘g vs target ’ + suf.target + ‘g \u2014 ’ + suf.detail + ‘</div>’;
-sufDetail += suf.fixes.map((f, fi) => ‘<button class="fix-btn" onclick="applyFix(\'' + meal.id + '\',' + idx + ',' + weekNum + ',' + fi + ')">’ + f.label + ‘</button>’).join(’ ‘);
-} else if (suf.detail) { sufDetail = ‘<div class="risk-detail">’ + suf.detail + ‘</div>’; }
-html += ‘<div class="meal-card ' + (meal._locked ? 'locked' : '') + '" id="meal-' + weekNum + '-' + idx + '">’ +
-‘<div class="meal-card-day">’ + meal._day + ’ \u00b7 Week ’ + weekNum + ‘</div>’ +
-‘<div class="meal-card-header"><div class="meal-card-title">’ + meal.title + ‘</div>’ + (meal._aiGenerated ? ‘<span class="tag" style="font-size:0.7rem;">\u2728 AI</span>’ : ‘’) + ‘</div>’ +
-‘<div class="meal-meta"><span class="tag tag-cuisine">’ + meal.cuisine + ‘</span><span class="tag">’ + getDifficultyEmoji(meal.difficulty) + ’ ’ + getDifficultyLabel(meal.difficulty) + ‘</span><span class="tag tag-time">\u23f1 ’ + meal.cookTime + ’ min</span></div>’ +
-‘<div class="produce-list"><strong>Protein:</strong> ’ + (meal.primaryProtein ? meal.primaryProtein.name + ’ (’ + (meal.primaryProtein.rawGrams || ‘?’) + ‘g raw’ + (meal.primaryProtein.pieces ? ‘, ’ + meal.primaryProtein.pieces + ’ pcs’ : ‘’) + ‘)’ : ‘Various’) + ‘</div>’ +
-‘<div class="leftover-status ' + sufClass + '">’ + sufIcon + ’ Leftovers: ’ + suf.status + ’ (’ + (suf.confidence || ‘N/A’) + ’ confidence)’ + sufDetail + ‘</div>’ +
-‘<div class="meal-card-actions">’ +
-‘<button class="btn-secondary btn-small" onclick="toggleLock(' + weekNum + ',' + idx + ')">’ + (meal._locked ? ‘\uD83D\uDD12 Unlock’ : ‘\uD83D\uDD13 Lock’) + ‘</button>’ +
-‘<button class="btn-secondary btn-small" onclick="swapMeal(' + weekNum + ',' + idx + ',-1)">\u2191 Move</button>’ +
-‘<button class="btn-secondary btn-small" onclick="swapMeal(' + weekNum + ',' + idx + ',1)">\u2193 Move</button>’ +
-‘<button class="btn-secondary btn-small" onclick="viewRecipe(\'' + meal.id + '\')">\uD83D\uDCD6 Recipe</button>’ +
-‘</div></div>’;
+sufDetail = `<div class="risk-detail">~${suf.estimated}g vs target ${suf.target}g — ${suf.detail}</div>`;
+sufDetail += suf.fixes.map((f, fi) => `<button class="fix-btn" onclick="applyFix('${meal.id}',${idx},${weekNum},${fi})">${f.label}</button>`).join(’ ’);
+} else if (suf.detail) { sufDetail = `<div class="risk-detail">${suf.detail}</div>`; }
+html += ` <div class="meal-card ${meal._locked ? 'locked' : ''}" id="meal-${weekNum}-${idx}"> <div class="meal-card-day">${meal._day} · Week ${weekNum}</div> <div class="meal-card-header"> <div class="meal-card-title">${meal.title}</div> ${meal._aiGenerated ? '<span class="tag" style="font-size:0.7rem;">✨ AI</span>' : ''} </div> <div class="meal-meta"> <span class="tag tag-cuisine">${meal.cuisine}</span> <span class="tag">${getDifficultyEmoji(meal.difficulty)} ${getDifficultyLabel(meal.difficulty)}</span> <span class="tag tag-time">⏱ ${meal.cookTime} min</span> </div> <div class="produce-list"><strong>Protein:</strong> ${meal.primaryProtein ? meal.primaryProtein.name + ' (' + (meal.primaryProtein.rawGrams || '?') + 'g raw' + (meal.primaryProtein.pieces ? ', ' + meal.primaryProtein.pieces + ' pcs' : '') + ')' : 'Various'}</div> <div class="leftover-status ${sufClass}">${sufIcon} Leftovers: ${suf.status} (${suf.confidence || 'N/A'} confidence)${sufDetail}</div> <div class="meal-card-actions"> <button class="btn-secondary btn-small" onclick="toggleLock(${weekNum},${idx})">${meal._locked ? '🔒 Unlock' : '🔓 Lock'}</button> <button class="btn-secondary btn-small" onclick="swapMeal(${weekNum},${idx},-1)">↑ Move</button> <button class="btn-secondary btn-small" onclick="swapMeal(${weekNum},${idx},1)">↓ Move</button> <button class="btn-secondary btn-small" onclick="viewRecipe('${meal.id}')">📖 Recipe</button> </div> </div>`;
 });
 html += ‘</div></div>’;
 }
 renderWeek(plan.week1, 1);
 renderWeek(plan.week2, 2);
-html += ‘<div class="action-bar mt-4"><button class="btn-primary" onclick="regenerateUnlocked()">\uD83D\uDD04 Regenerate Unlocked Meals</button></div>’;
+html += `<div class="action-bar mt-4"><button class="btn-primary" onclick="regenerateUnlocked()">🔄 Regenerate Unlocked Meals</button></div>`;
 container.innerHTML = html;
 }
 
@@ -475,33 +541,51 @@ const tempDay = meals[idx]._day; meals[idx]._day = meals[newIdx]._day; meals[new
 renderMealPlan();
 }
 
+// ============================================================
+// REGENERATE UNLOCKED — AI ONLY, NO FALLBACK
+// ============================================================
+
 async function regenerateUnlocked() {
-if (!state.currentMealPlan) { toast(‘No meal plan loaded \u2014 generate a plan first.’, ‘error’); return; }
+if (!state.currentMealPlan) { toast(‘No meal plan loaded — generate a plan first.’, ‘error’); return; }
 const locked1 = state.currentMealPlan.week1.filter(m => m._locked);
 const locked2 = state.currentMealPlan.week2.filter(m => m._locked);
 const unlockedCount = state.currentMealPlan.week1.filter(m => !m._locked).length + state.currentMealPlan.week2.filter(m => !m._locked).length;
-if (unlockedCount === 0) { toast(‘All meals are locked \u2014 unlock some first.’, ‘info’); return; }
+if (unlockedCount === 0) { toast(‘All meals are locked — unlock some first.’, ‘info’); return; }
+
 const session = state.currentSession || {};
 const lockedTitles = […locked1, …locked2].map(m => m.title);
-showLoading(‘Claude is regenerating ’ + unlockedCount + ’ unlocked meal’ + (unlockedCount > 1 ? ‘s’ : ‘’) + ‘\u2026’);
+showLoading(`Claude is regenerating ${unlockedCount} unlocked meal${unlockedCount > 1 ? 's' : ''}…`);
+
+let newRecipes;
 try {
-const rawRecipes = await callClaudeAPI(buildSystemPrompt(), buildUserPrompt(session.delivery || [], session.meat || [], session.leftovers || [], session.dislikes || ‘’, 9, lockedTitles));
-const newRecipes = parseAIRecipes(rawRecipes);
+const raw = await callClaudeAPI(
+buildSystemPrompt(),
+buildUserPrompt(session.delivery || [], session.meat || [], session.leftovers || [], session.dislikes || ‘’, 9, lockedTitles)
+);
+newRecipes = parseAIRecipes(raw);
+} catch (err) {
+// Show error clearly above the existing plan — locked meals remain untouched
+showGenerationError(‘regenerate’, err);
+return;
+}
+hideLoading();
+
 const d1 = [‘Mon’,‘Tue’,‘Wed’,‘Thu’,‘Fri’], d2 = [‘Mon’,‘Tue’,‘Wed’,‘Thu’];
 let ni = 0;
-state.currentMealPlan.week1 = d1.map((day, i) => { const lk = locked1.find(m => m._day === day); if (lk) return lk; const fr = newRecipes[ni++]; if (fr) { fr._day = day; fr._week = 1; fr._locked = false; fr._sufficiency = calcLeftoverSufficiency(fr); return fr; } return state.currentMealPlan.week1[i]; });
-state.currentMealPlan.week2 = d2.map((day, i) => { const lk = locked2.find(m => m._day === day); if (lk) return lk; const fr = newRecipes[ni++]; if (fr) { fr._day = day; fr._week = 2; fr._locked = false; fr._sufficiency = calcLeftoverSufficiency(fr); return fr; } return state.currentMealPlan.week2[i]; });
-saveCurrentSession(); renderMealPlan(); renderRecipes(); renderRateNotes(); generateShoppingList();
-toast(’\u2728 ’ + unlockedCount + ’ meal’ + (unlockedCount > 1 ? ‘s’ : ‘’) + ’ regenerated by Claude!’, ‘success’);
-} catch (err) {
-console.error(‘Regenerate error:’, err);
-toast(‘Claude unavailable \u2014 using built-in recipes as fallback.’, ‘error’);
-const fb = generateMealPlanFallback(session.delivery || [], session.meat || [], session.leftovers || [], session.dislikes || ‘’);
-const d1 = [‘Mon’,‘Tue’,‘Wed’,‘Thu’,‘Fri’], d2 = [‘Mon’,‘Tue’,‘Wed’,‘Thu’];
-state.currentMealPlan.week1 = d1.map((day, i) => { const lk = locked1.find(m => m._day === day); if (lk) return lk; const fr = fb.week1[i]; if (fr) { fr._day = day; return fr; } return state.currentMealPlan.week1[i]; });
-state.currentMealPlan.week2 = d2.map((day, i) => { const lk = locked2.find(m => m._day === day); if (lk) return lk; const fr = fb.week2[i]; if (fr) { fr._day = day; return fr; } return state.currentMealPlan.week2[i]; });
-saveCurrentSession(); renderMealPlan(); renderRecipes(); renderRateNotes(); generateShoppingList();
-} finally { hideLoading(); }
+state.currentMealPlan.week1 = d1.map((day, i) => {
+const lk = locked1.find(m => m._day === day); if (lk) return lk;
+const fr = newRecipes[ni++]; if (fr) { fr._day = day; fr._week = 1; fr._locked = false; fr._sufficiency = calcLeftoverSufficiency(fr); return fr; }
+return state.currentMealPlan.week1[i];
+});
+state.currentMealPlan.week2 = d2.map((day, i) => {
+const lk = locked2.find(m => m._day === day); if (lk) return lk;
+const fr = newRecipes[ni++]; if (fr) { fr._day = day; fr._week = 2; fr._locked = false; fr._sufficiency = calcLeftoverSufficiency(fr); return fr; }
+return state.currentMealPlan.week2[i];
+});
+
+saveCurrentSession();
+renderMealPlan(); renderRecipes(); renderRateNotes(); generateShoppingList();
+toast(`✨ ${unlockedCount} meal${unlockedCount > 1 ? 's' : ''} regenerated by Claude!`, ‘success’);
 }
 
 function applyFix(recipeId, mealIdx, weekNum, fixIdx) {
@@ -537,20 +621,10 @@ if (fb.proteinMultiplier && meal.primaryProtein) {
 const newRaw = Math.round((meal.primaryProtein.rawGrams || 0) * fb.proteinMultiplier);
 if (newRaw > 0) ingredients = ingredients.map(ing => ing.toLowerCase().includes(meal.primaryProtein.name.toLowerCase()) ? ing.replace(/\d+g/, newRaw + ‘g’) : ing);
 }
-if (fb.lessSalt) steps.push(‘Finishing step: Season to taste at the very end \u2014 add salt gradually and taste between additions.’);
+if (fb.lessSalt) steps.push(‘Finishing step: Season to taste at the very end — add salt gradually and taste between additions.’);
 if (fb.excludeIngredients && fb.excludeIngredients.length) fb.excludeIngredients.forEach(excl => { ingredients = ingredients.filter(ing => !ing.toLowerCase().includes(excl.toLowerCase())); });
 }
-html += ‘<div class="recipe-card" id="recipe-' + meal.id + '">’ +
-‘<h3>’ + meal.title + (meal._aiGenerated ? ’ <span style="font-size:0.75rem;font-weight:500;color:var(--color-primary,#e07b39);">\u2728 AI Generated</span>’ : ‘’) + ‘</h3>’ +
-‘<div class="meal-meta"><span class="tag tag-cuisine">’ + meal.cuisine + ‘</span><span class="tag">’ + getDifficultyEmoji(meal.difficulty) + ’ ’ + getDifficultyLabel(meal.difficulty) + ‘</span><span class="tag tag-time">\u23f1 ’ + meal.cookTime + ’ min</span></div>’ +
-‘<div class="recipe-section"><h4>Ingredients</h4><ul class="ingredients-list">’ + ingredients.map(i => ‘<li>’ + i + ‘</li>’).join(’’) + ‘</ul></div>’ +
-‘<div class="recipe-section"><h4>Method</h4><ol class="steps-list">’ + steps.map(s => ‘<li>’ + s + ‘</li>’).join(’’) + ‘</ol></div>’ +
-(meal.meatTip ? ‘<div class="callout-box meat-tip"><h4>\uD83E\uDD69 Meat Prep Tip</h4>’ + meal.meatTip + ‘</div>’ : ‘’) +
-(meal.toddlerAdjust ? ‘<div class="callout-box toddler"><h4>\uD83D\uDC76 Toddler Adjustment</h4>’ + meal.toddlerAdjust + ‘</div>’ : ‘’) +
-(meal.tips ? ‘<div class="callout-box tip"><h4>\uD83D\uDCA1 Chef Tips</h4>’ + meal.tips + ‘</div>’ : ‘’) +
-(meal.leftoverHandling ? ‘<div class="callout-box"><h4>\uD83D\uDCE6 Leftover Handling</h4>’ + meal.leftoverHandling + ‘</div>’ : ‘’) +
-‘<div class="meal-card-actions mt-4"><button class="btn-primary btn-small" onclick="openCookMode(\'' + meal.id + '\')">\uD83C\uDF73 Cook Mode</button></div>’ +
-‘</div>’;
+html += `<div class="recipe-card" id="recipe-${meal.id}"> <h3>${meal.title}${meal._aiGenerated ? ' <span style="font-size:0.75rem;font-weight:500;color:var(--color-primary,#e07b39);">✨ AI Generated</span>' : ''}</h3> <div class="meal-meta"> <span class="tag tag-cuisine">${meal.cuisine}</span> <span class="tag">${getDifficultyEmoji(meal.difficulty)} ${getDifficultyLabel(meal.difficulty)}</span> <span class="tag tag-time">⏱ ${meal.cookTime} min</span> </div> <div class="recipe-section"><h4>Ingredients</h4><ul class="ingredients-list">${ingredients.map(i =>`<li>${i}</li>`).join('')}</ul></div> <div class="recipe-section"><h4>Method</h4><ol class="steps-list">${steps.map(s => `<li>${s}</li>`).join('')}</ol></div> ${meal.meatTip ? `<div class="callout-box meat-tip"><h4>🥩 Meat Prep Tip</h4>${meal.meatTip}</div>`: ''} ${meal.toddlerAdjust ?`<div class="callout-box toddler"><h4>👶 Toddler Adjustment</h4>${meal.toddlerAdjust}</div>`: ''} ${meal.tips ?`<div class="callout-box tip"><h4>💡 Chef Tips</h4>${meal.tips}</div>`: ''} ${meal.leftoverHandling ?`<div class="callout-box"><h4>📦 Leftover Handling</h4>${meal.leftoverHandling}</div>` : ''} <div class="meal-card-actions mt-4"><button class="btn-primary btn-small" onclick="openCookMode('${meal.id}')">🍳 Cook Mode</button></div> </div>`;
 });
 html += ‘</div>’;
 container.innerHTML = html;
@@ -565,17 +639,13 @@ function openCookMode(recipeId) {
 const allMeals = […(state.currentMealPlan?.week1 || []), …(state.currentMealPlan?.week2 || [])];
 const meal = allMeals.find(m => m && m.id === recipeId);
 if (!meal) return;
-document.getElementById(‘cookModeTitle’).textContent = ’\uD83C\uDF73 ’ + meal.title;
+document.getElementById(‘cookModeTitle’).textContent = ‘🍳 ’ + meal.title;
 const body = document.getElementById(‘cookModeBody’);
 let html = ‘’;
 meal.steps.forEach((step, i) => {
 const stepIngs = (meal.stepIngredients && meal.stepIngredients[i]) || [];
 const timer = (meal.timers && meal.timers[i]) || null;
-html += ‘<div class="cook-step" id="cook-step-' + i + '">’ +
-‘<div class="cook-step-header"><input type="checkbox" class="cook-step-check" data-step="' + i + '" onchange="toggleCookStep(' + i + ')"><div class="cook-step-num">’ + (i + 1) + ‘</div><div class="cook-step-text">’ + step + ‘</div></div>’ +
-(stepIngs.length ? ‘<div class="cook-step-ingredients">Uses: ’ + stepIngs.join(’, ’) + ‘</div>’ : ‘’) +
-(timer ? ‘<div class="cook-timer-bar"><button class="timer-btn" onclick="startCookTimer(this,\'' + timer + '\')">\u23f1 Start Timer (’ + timer + ‘)</button><span class="timer-display" id="timer-' + i + '">–:–</span></div>’ : ‘’) +
-‘</div>’;
+html += `<div class="cook-step" id="cook-step-${i}"> <div class="cook-step-header"> <input type="checkbox" class="cook-step-check" data-step="${i}" onchange="toggleCookStep(${i})"> <div class="cook-step-num">${i + 1}</div> <div class="cook-step-text">${step}</div> </div> ${stepIngs.length ? `<div class="cook-step-ingredients">Uses: ${stepIngs.join(’, ’)}</div>`: ''} ${timer ?`<div class="cook-timer-bar"><button class="timer-btn" onclick="startCookTimer(this,'${timer}')">⏱ Start Timer (${timer})</button><span class="timer-display" id="timer-${i}">–:–</span></div>` : ''} </div>`;
 });
 body.innerHTML = html;
 document.getElementById(‘cookModeModal’).style.display = ‘flex’;
@@ -594,16 +664,16 @@ const m = timeStr.match(/(\d+)/);
 if (m) seconds = timeStr.includes(‘sec’) ? parseInt(m[1]) : parseInt(m[1]) * 60;
 if (seconds === 0) seconds = 60;
 const display = btn.parentElement.querySelector(’.timer-display’);
-btn.disabled = true; btn.textContent = ‘\u23f1 Running…’;
+btn.disabled = true; btn.textContent = ‘⏱ Running…’;
 const interval = setInterval(() => {
 seconds–;
 if (seconds <= 0) {
-clearInterval(interval); display.textContent = ‘\u2705 DONE!’; display.style.color = ‘var(–color-success)’; btn.textContent = ‘\u2705 Done’;
+clearInterval(interval); display.textContent = ‘✅ DONE!’; display.style.color = ‘var(–color-success)’; btn.textContent = ‘✅ Done’;
 try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = ‘sine’; osc.frequency.value = 800; osc.connect(ctx.destination); osc.start(); setTimeout(() => osc.stop(), 300); } catch(e) {}
 return;
 }
 const min = Math.floor(seconds / 60); const sec = seconds % 60;
-display.textContent = min + ‘:’ + sec.toString().padStart(2, ‘0’);
+display.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
 }, 1000);
 }
 
@@ -616,27 +686,12 @@ const plan = state.currentMealPlan;
 const container = document.getElementById(‘rateNotesContent’);
 if (!plan) { container.innerHTML = ‘<p class="empty-state">Cook a meal, then rate it here.</p>’; return; }
 const allMeals = […plan.week1, …plan.week2].filter(Boolean);
-let html = ‘<p class="subtitle" style="margin-bottom:16px;">Your ratings are sent to Claude each time you generate a new plan \u2014 blacklisted meals are never repeated, high-rated ones rotate back in every 6\u20138 weeks, and adjustments like \u201cmore meat\u201d carry forward automatically.</p>’;
+let html = ‘<p class="subtitle" style="margin-bottom:16px;">Your ratings are sent to Claude every time you generate a new plan — blacklisted meals are never repeated, high-rated ones rotate back in every 6–8 weeks, and adjustments like “more meat” carry forward automatically.</p>’;
 allMeals.forEach(meal => {
 const fb = state.recipeFeedback[meal.id] || {};
 const rating = fb.rating || 0;
 const excludeIngredients = fb.excludeIngredients || [];
-html += ‘<div class="rate-card" id="rate-' + meal.id + '">’ +
-‘<h3>’ + meal.title + (fb.blacklisted ? ’ <span class="blacklist-badge">BLACKLISTED</span>’ : ‘’) + ‘</h3>’ +
-‘<div class="star-rating">’ + [1,2,3,4,5].map(s => ‘<span class=“star-btn ’ + (s <= rating ? ‘active’ : ‘’) + ‘” onclick=“setRating('’ + meal.id + ‘',’ + s + ‘,'’ + meal.title.replace(/’/g, “\’”) + ‘')”>\u2605</span>’).join(’’) + ‘<span class="text-xs text-muted" style="margin-left:8px">’ + (rating ? rating + ‘/5’ : ‘Not rated’) + ‘</span></div>’ +
-‘<div class="toggle-group">’ +
-‘<span class="toggle-chip ' + (fb.moreMeat ? 'active' : '') + '" onclick="toggleFeedback(\'' + meal.id + '\',\'moreMeat\')">\uD83E\uDD69 More meat next time</span>’ +
-‘<span class="toggle-chip ' + (fb.lessSalt ? 'active' : '') + '" onclick="toggleFeedback(\'' + meal.id + '\',\'lessSalt\')">\uD83E\uDDC2 Less salty</span>’ +
-‘<span class="toggle-chip ' + (fb.lessSpicy ? 'active' : '') + '" onclick="toggleFeedback(\'' + meal.id + '\',\'lessSpicy\')">\uD83C\uDF36\uFE0F Less spicy</span>’ +
-‘<span class="toggle-chip ' + (fb.moreSpicy ? 'active' : '') + '" onclick="toggleFeedback(\'' + meal.id + '\',\'moreSpicy\')">\uD83D\uDD25 More spicy</span>’ +
-‘</div>’ +
-‘<label class="text-sm">Exclude ingredient:<select onchange="excludeIngredient(\'' + meal.id + '\', this.value)"><option value="">— Select —</option>’ +
-meal.ingredients.map(ing => { const short = ing.replace(/^\d+[gx]?\s*/i, ‘’).replace(/,.*/, ‘’).trim(); const excl = excludeIngredients.includes(short); return ‘<option value=”’ + short + ‘” ’ + (excl ? ‘selected’ : ‘’) + ‘>’ + short + (excl ? ’ \u2717’ : ‘’) + ‘</option>’; }).join(’’) +
-‘</select></label>’ +
-(excludeIngredients.length ? ‘<div class="text-xs mt-2">Excluded: ’ + excludeIngredients.map(e => ‘<span class="tag">’ + e + ’ <span style="cursor:pointer" onclick="removeExclusion(\'' + meal.id + '\',\'' + e + '\')">\u2715</span></span>’).join(’ ’) + ‘</div>’ : ‘’) +
-‘<label class="text-sm mt-2">Notes<textarea rows="2" id="notes-' + meal.id + '" oninput="saveNotes(\'' + meal.id + '\', this.value)">’ + (fb.notes || ‘’) + ‘</textarea></label>’ +
-(fb.blacklisted ? ‘<button class="btn-secondary btn-small mt-2" onclick="unBlacklist(\'' + meal.id + '\')">Remove from blacklist</button>’ : ‘’) +
-‘</div>’;
+html += `<div class="rate-card" id="rate-${meal.id}"> <h3>${meal.title}${fb.blacklisted ? ' <span class="blacklist-badge">BLACKLISTED</span>' : ''}</h3> <div class="star-rating"> ${[1,2,3,4,5].map(s =>`<span class=“star-btn ${s <= rating ? ‘active’ : ‘’}” onclick=“setRating(’${meal.id}’,${s},’${meal.title.replace(/’/g, “\’”)}’)”>★</span>`).join('')} <span class="text-xs text-muted" style="margin-left:8px">${rating ? rating + '/5' : 'Not rated'}</span> </div> <div class="toggle-group"> <span class="toggle-chip ${fb.moreMeat ? 'active' : ''}" onclick="toggleFeedback('${meal.id}','moreMeat')">🥩 More meat next time</span> <span class="toggle-chip ${fb.lessSalt ? 'active' : ''}" onclick="toggleFeedback('${meal.id}','lessSalt')">🧂 Less salty</span> <span class="toggle-chip ${fb.lessSpicy ? 'active' : ''}" onclick="toggleFeedback('${meal.id}','lessSpicy')">🌶️ Less spicy</span> <span class="toggle-chip ${fb.moreSpicy ? 'active' : ''}" onclick="toggleFeedback('${meal.id}','moreSpicy')">🔥 More spicy</span> </div> <label class="text-sm">Exclude ingredient: <select onchange="excludeIngredient('${meal.id}', this.value)"> <option value="">— Select —</option> ${meal.ingredients.map(ing => { const short = ing.replace(/^\d+[gx]?\s*/i, '').replace(/,.*/, '').trim(); const excl = excludeIngredients.includes(short); return `<option value=”${short}” ${excl ? ‘selected’ : ‘’}>${short}${excl ? ’ ✗’ : ‘’}</option>`; }).join('')} </select> </label> ${excludeIngredients.length ? `<div class="text-xs mt-2">Excluded: ${excludeIngredients.map(e => `<span class="tag">${e} <span style="cursor:pointer" onclick="removeExclusion('${meal.id}','${e}')">✕</span></span>`).join(’ ’)}</div>`: ''} <label class="text-sm mt-2">Notes<textarea rows="2" id="notes-${meal.id}" oninput="saveNotes('${meal.id}', this.value)">${fb.notes || ''}</textarea></label> ${fb.blacklisted ?`<button class="btn-secondary btn-small mt-2" onclick="unBlacklist('${meal.id}')">Remove from blacklist</button>` : ''} </div>`;
 });
 container.innerHTML = html;
 }
@@ -644,12 +699,10 @@ container.innerHTML = html;
 function setRating(recipeId, rating, recipeTitle) {
 if (!state.recipeFeedback[recipeId]) state.recipeFeedback[recipeId] = {};
 const fb = state.recipeFeedback[recipeId];
-fb.rating = rating;
-fb.title = recipeTitle || fb.title || recipeId;
-if (rating === 1) { fb.blacklisted = true; toast(‘Blacklisted \u2014 Claude won't suggest this again.’, ‘error’); }
+fb.rating = rating; fb.title = recipeTitle || fb.title || recipeId;
+if (rating === 1) { fb.blacklisted = true; toast(‘Blacklisted — Claude won't suggest this again.’, ‘error’); }
 else { fb.blacklisted = false; if (rating >= 4) toast(‘Great rating! Claude will rotate this back in.’, ‘success’); }
-save(‘recipeFeedback’, state.recipeFeedback);
-renderRateNotes();
+save(‘recipeFeedback’, state.recipeFeedback); renderRateNotes();
 }
 
 function toggleFeedback(recipeId, key) {
@@ -661,11 +714,10 @@ if (!fb.proteinMultiplier) fb.proteinMultiplier = 1;
 if (fb[key]) {
 fb.moreMeatCount = (fb.moreMeatCount || 0) + 1;
 fb.proteinMultiplier = fb.moreMeatCount === 1 ? Math.min(1.6, fb.proteinMultiplier + 0.25) : Math.min(1.6, fb.proteinMultiplier + 0.10);
-toast(’Protein increased to ’ + Math.round(fb.proteinMultiplier * 100) + ‘%’, ‘info’);
+toast(`Protein increased to ${Math.round(fb.proteinMultiplier * 100)}%`, ‘info’);
 }
 }
-save(‘recipeFeedback’, state.recipeFeedback);
-renderRateNotes();
+save(‘recipeFeedback’, state.recipeFeedback); renderRateNotes();
 }
 
 function excludeIngredient(recipeId, ingredient) {
@@ -709,7 +761,7 @@ const tbody = document.getElementById(‘pantryBody’);
 tbody.innerHTML = ‘’;
 state.pantry.forEach((item, idx) => {
 const tr = document.createElement(‘tr’);
-tr.innerHTML = ‘<td>’ + item.item + ‘</td><td><span class="text-xs">’ + item.category + ‘</span></td><td><span class="' + (item.have ? 'pantry-have' : 'pantry-missing') + '">’ + (item.have ? ‘\u2713’ : ‘\u2717’) + ‘</span></td><td class="text-xs">’ + item.qty + ‘</td><td>’ + (item.low ? ‘<span class="pantry-low">LOW</span>’ : ‘\u2014’) + ‘</td><td class="text-xs">’ + item.notes + ‘</td><td><button class="btn-secondary btn-small" onclick="togglePantryHave(' + idx + ')">’ + (item.have ? ‘Mark Out’ : ‘Mark Have’) + ‘</button> <button class="btn-danger btn-small" onclick="removePantryItem(' + idx + ')">\u2715</button></td>’;
+tr.innerHTML = `<td>${item.item}</td><td><span class="text-xs">${item.category}</span></td><td><span class="${item.have ? 'pantry-have' : 'pantry-missing'}">${item.have ? '✓' : '✗'}</span></td><td class="text-xs">${item.qty}</td><td>${item.low ? '<span class="pantry-low">LOW</span>' : '—'}</td><td class="text-xs">${item.notes}</td><td><button class="btn-secondary btn-small" onclick="togglePantryHave(${idx})">${item.have ? 'Mark Out' : 'Mark Have'}</button> <button class="btn-danger btn-small" onclick="removePantryItem(${idx})">✕</button></td>`;
 tbody.appendChild(tr);
 });
 renderPantryAlerts();
@@ -738,8 +790,8 @@ const newStaples = state.pantry.filter(p => p._new);
 const restock = state.pantry.filter(p => p.low || !p.have);
 if (!newStaples.length && !restock.length) { alerts.style.display = ‘none’; return; }
 alerts.style.display = ‘block’;
-if (newStaples.length) { newBox.innerHTML = ‘<strong>New staples added this fortnight:</strong> ’ + newStaples.map(p => p.item).join(’, ’); newBox.style.display = ‘block’; } else newBox.style.display = ‘none’;
-if (restock.length) { restockBox.innerHTML = ‘<strong>Restock soon:</strong> ’ + restock.map(p => p.item).join(’, ’); restockBox.style.display = ‘block’; } else restockBox.style.display = ‘none’;
+if (newStaples.length) { newBox.innerHTML = `<strong>New staples this fortnight:</strong> ${newStaples.map(p => p.item).join(', ')}`; newBox.style.display = ‘block’; } else newBox.style.display = ‘none’;
+if (restock.length) { restockBox.innerHTML = `<strong>Restock soon:</strong> ${restock.map(p => p.item).join(', ')}`; restockBox.style.display = ‘block’; } else restockBox.style.display = ‘none’;
 }
 
 // ============================================================
@@ -753,8 +805,8 @@ const allMeals = […state.currentMealPlan.week1, …state.currentMealPlan.week2
 function parseIngLine(raw) {
 const line = raw.trim();
 const m = line.match(/^(\d+(?:[./]\d+)?)\s*(g|kg|ml|x|tbsp|tsp|cups?|bunch|punnet|bag|head|can|cloves?|large|small)?\s+(.+)$/i);
-if (m) return { qty: m[1], unit: (m[2] || ‘’).toLowerCase(), name: m[3].replace(/,.*/, ‘’).replace(/(.*)/, ‘’).trim().toLowerCase(), raw: line };
-return { qty: ‘’, unit: ‘’, name: line.replace(/,.*/, ‘’).replace(/(.*)/, ‘’).trim().toLowerCase(), raw: line };
+if (m) return { qty: m[1], unit: (m[2] || ‘’).toLowerCase(), name: m[3].replace(/,.*/, ‘’).replace(/(.*)/, ‘’).trim().toLowerCase() };
+return { qty: ‘’, unit: ‘’, name: line.replace(/,.*/, ‘’).replace(/(.*)/, ‘’).trim().toLowerCase() };
 }
 
 function normaliseKey(name) { return name.replace(/s$/, ‘’).replace(/\s+/g, ‘*’).replace(/[^a-z0-9*]/g, ‘’); }
@@ -767,7 +819,7 @@ allMeals.forEach(meal => {
 meal.ingredients.forEach(ing => {
 const parsed = parseIngLine(ing);
 const key = normaliseKey(parsed.name);
-if (!ingredientMap[key]) ingredientMap[key] = { name: parsed.name, displayName: parsed.raw.replace(/,.*/, ‘’).trim(), qty: parsed.qty, unit: parsed.unit, mentions: 1 };
+if (!ingredientMap[key]) ingredientMap[key] = { name: parsed.name, qty: parsed.qty, unit: parsed.unit, mentions: 1 };
 else ingredientMap[key].mentions++;
 });
 });
@@ -781,10 +833,10 @@ if (inOnHand) continue;
 let note = ‘’;
 if ([‘soy sauce’,‘sesame oil’,‘mirin’,‘fish sauce’,‘oyster sauce’,‘gochujang’].some(a => val.name.includes(a))) note = ‘Asian aisle at Woolies’;
 else if ([‘cream’,‘yoghurt’,‘sour cream’,‘butter’,‘parmesan’,‘egg’].some(a => val.name.includes(a))) note = ‘Dairy section’;
-else if (val.name.includes(‘can ‘) || val.name.includes(‘canned’)) note = ‘Canned goods aisle’;
+else if (val.name.includes(’can ’) || val.name.includes(‘canned’)) note = ‘Canned goods aisle’;
 let qtyStr = val.qty && val.unit ? val.qty + val.unit : val.qty || ‘’;
-if (val.mentions > 1) qtyStr += ’ (\u00d7’ + val.mentions + ’ recipes)’;
-list.push({ item: val.name.charAt(0).toUpperCase() + val.name.slice(1), qty: qtyStr, notes: note, mentions: val.mentions });
+if (val.mentions > 1) qtyStr += ` (×${val.mentions} recipes)`;
+list.push({ item: val.name.charAt(0).toUpperCase() + val.name.slice(1), qty: qtyStr, notes: note });
 }
 
 state.currentShoppingList = list;
@@ -797,7 +849,7 @@ const preview = document.getElementById(‘shoppingListPreview’);
 const list = state.currentShoppingList;
 if (!list || !list.length) { preview.innerHTML = ‘<p class="text-sm text-muted">No shopping list yet.</p>’; return; }
 let html = ‘<table class="data-table"><thead><tr><th>Item</th><th>Qty</th><th>Notes</th></tr></thead><tbody>’;
-list.forEach(item => { html += ‘<tr><td>’ + item.item + ‘</td><td>’ + item.qty + ‘</td><td>’ + item.notes + ‘</td></tr>’; });
+list.forEach(item => { html += `<tr><td>${item.item}</td><td>${item.qty}</td><td>${item.notes}</td></tr>`; });
 html += ‘</tbody></table>’;
 preview.innerHTML = html;
 }
@@ -814,10 +866,10 @@ document.getElementById(‘exportRecipesBtn’).disabled = !state.currentMealPla
 function updateWooliesData() {
 const list = state.currentShoppingList;
 if (!list || !list.length) return;
-const plain = list.map(i => (i.qty ? i.qty + ’ ’ : ‘’) + i.item + (i.notes ? ’ (’ + i.notes + ‘)’ : ‘’)).join(’\n’);
+const plain = list.map(i => `${i.qty ? i.qty + ' ' : ''}${i.item}${i.notes ? ' (' + i.notes + ')' : ''}`).join(’\n’);
 document.getElementById(‘wooliesPlainText’).textContent = plain;
 document.getElementById(‘wooliesJSON’).textContent = JSON.stringify(list.map(i => ({ name: i.item, quantity: i.qty || ‘1’, notes: i.notes, preferred_brand: ‘’ })), null, 2);
-document.getElementById(‘wooliesPrompt’).textContent = ‘Task: Add items to my Woolworths online cart, but DO NOT check out.\nInputs:\n’ + plain + ‘\n\nRules:\n1) Open woolworths.com.au and prompt me to log in if needed.\n2) For each item: search, choose sensible default unless Notes specify, ask me to pick if multiple close matches, add quantity.\n3) If not found: add to a 'Could not add' list with closest matches and ask what to do.\n4) After all items: open cart and summarise added items, substitutions, missing items.\n5) Stop and wait for confirmation before any checkout step.’;
+document.getElementById(‘wooliesPrompt’).textContent = `Task: Add items to my Woolworths online cart, but DO NOT check out.\nInputs:\n${plain}\n\nRules:\n1) Open woolworths.com.au and prompt me to log in if needed.\n2) For each item: search, choose sensible default unless Notes specify, ask me to pick if multiple close matches, add quantity.\n3) If not found: add to a 'Could not add' list with closest matches and ask what to do.\n4) After all items: open cart and summarise added items, substitutions, missing items.\n5) Stop and wait for confirmation before any checkout step.`;
 }
 
 // ============================================================
@@ -832,7 +884,7 @@ const thinBorder = { style: BorderStyle.SINGLE, size: 1, color: ‘CCCCCC’ };
 const borders = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
 const headerRow = new TableRow({ children: [‘Item’,‘Quantity’,‘Notes’].map(text => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 20, font: ‘Calibri’ })] })], borders, shading: { fill: ‘F5F0E8’ }, width: { size: text === ‘Item’ ? 4000 : 2000, type: WidthType.DXA } })) });
 const rows = list.map(item => new TableRow({ children: [item.item, item.qty || ‘’, item.notes || ‘’].map(text => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text, size: 20, font: ‘Calibri’ })] })], borders })) }));
-const doc = new Document({ sections: [{ properties: {}, children: [new Paragraph({ children: [new TextRun({ text: ‘Shopping List \u2014 AU Family Dinner Planner’, bold: true, size: 32, font: ‘Calibri’ })], heading: HeadingLevel.HEADING_1, spacing: { after: 200 } }), new Paragraph({ children: [new TextRun({ text: ’Generated: ’ + new Date().toLocaleDateString(‘en-AU’), size: 18, font: ‘Calibri’, color: ‘888888’ })], spacing: { after: 300 } }), new Table({ rows: [headerRow, …rows], width: { size: 100, type: WidthType.PERCENTAGE } })] }] });
+const doc = new Document({ sections: [{ properties: {}, children: [new Paragraph({ children: [new TextRun({ text: ‘Shopping List — AU Family Dinner Planner’, bold: true, size: 32, font: ‘Calibri’ })], heading: HeadingLevel.HEADING_1, spacing: { after: 200 } }), new Paragraph({ children: [new TextRun({ text: `Generated: ${new Date().toLocaleDateString('en-AU')}`, size: 18, font: ‘Calibri’, color: ‘888888’ })], spacing: { after: 300 } }), new Table({ rows: [headerRow, …rows], width: { size: 100, type: WidthType.PERCENTAGE } })] }] });
 Packer.toBlob(doc).then(blob => { saveAs(blob, ‘shopping-list.docx’); toast(‘Shopping list exported’, ‘success’); });
 }
 
@@ -842,25 +894,28 @@ if (!plan) return;
 const { Document, Packer, Paragraph, TextRun, HeadingLevel } = docx;
 const allMeals = […plan.week1, …plan.week2].filter(Boolean);
 const children = [
-new Paragraph({ children: [new TextRun({ text: ‘Recipe Pack \u2014 AU Family Dinner Planner’, bold: true, size: 36, font: ‘Calibri’ })], heading: HeadingLevel.TITLE, spacing: { after: 200 } }),
-new Paragraph({ children: [new TextRun({ text: ‘Fortnight starting ’ + new Date().toLocaleDateString(‘en-AU’), size: 22, font: ‘Calibri’, color: ‘888888’ })], spacing: { after: 400 } }),
+new Paragraph({ children: [new TextRun({ text: ‘Recipe Pack — AU Family Dinner Planner’, bold: true, size: 36, font: ‘Calibri’ })], heading: HeadingLevel.TITLE, spacing: { after: 200 } }),
+new Paragraph({ children: [new TextRun({ text: `Fortnight starting ${new Date().toLocaleDateString('en-AU')}`, size: 22, font: ‘Calibri’, color: ‘888888’ })], spacing: { after: 400 } }),
 new Paragraph({ children: [new TextRun({ text: ‘Table of Contents’, bold: true, size: 28, font: ‘Calibri’ })], heading: HeadingLevel.HEADING_1, spacing: { after: 200 } })
 ];
-allMeals.forEach((meal, i) => children.push(new Paragraph({ children: [new TextRun({ text: (i + 1) + ‘. ’ + meal.title + ’ \u2014 ’ + getDifficultyLabel(meal.difficulty) + ’ \u2014 ’ + meal.cookTime + ’ min’, size: 22, font: ‘Calibri’ })], spacing: { after: 80 } })));
+allMeals.forEach((meal, i) => children.push(new Paragraph({ children: [new TextRun({ text: `${i+1}. ${meal.title} — ${getDifficultyLabel(meal.difficulty)} — ${meal.cookTime} min`, size: 22, font: ‘Calibri’ })], spacing: { after: 80 } })));
 allMeals.forEach(meal => {
 children.push(
 new Paragraph({ children: [new TextRun({ text: ‘’, break: 1 })], pageBreakBefore: true }),
 new Paragraph({ children: [new TextRun({ text: meal.title, bold: true, size: 30, font: ‘Calibri’ })], heading: HeadingLevel.HEADING_1, spacing: { after: 100 } }),
-new Paragraph({ children: [new TextRun({ text: getDifficultyLabel(meal.difficulty) + ’ \u00b7 ’ + meal.cuisine + ’ \u00b7 ’ + meal.cookTime + ’ min’ + (meal._aiGenerated ? ’ \u00b7 \u2728 AI Generated’ : ‘’), size: 20, font: ‘Calibri’, color: ‘888888’ })], spacing: { after: 200 } }),
+new Paragraph({ children: [new TextRun({ text: `${getDifficultyLabel(meal.difficulty)} · ${meal.cuisine} · ${meal.cookTime} min${meal._aiGenerated ? ' · ✨ AI Generated' : ''}`, size: 20, font: ‘Calibri’, color: ‘888888’ })], spacing: { after: 200 } }),
 new Paragraph({ children: [new TextRun({ text: ‘Ingredients’, bold: true, size: 24, font: ‘Calibri’ })], heading: HeadingLevel.HEADING_2, spacing: { after: 100 } })
 );
-meal.ingredients.forEach(ing => children.push(new Paragraph({ children: [new TextRun({ text: ’\u2022 ’ + ing, size: 20, font: ‘Calibri’ })], spacing: { after: 40 } })));
+meal.ingredients.forEach(ing => children.push(new Paragraph({ children: [new TextRun({ text: `• ${ing}`, size: 20, font: ‘Calibri’ })], spacing: { after: 40 } })));
 children.push(new Paragraph({ children: [new TextRun({ text: ‘Method’, bold: true, size: 24, font: ‘Calibri’ })], heading: HeadingLevel.HEADING_2, spacing: { before: 200, after: 100 } }));
-meal.steps.forEach((step, si) => children.push(new Paragraph({ children: [new TextRun({ text: (si + 1) + ’. ’ + step, size: 20, font: ‘Calibri’ })], spacing: { after: 80 } })));
-if (meal.meatTip) { children.push(new Paragraph({ children: [new TextRun({ text: ‘\uD83E\uDD69 Meat Prep Tip’, bold: true, size: 20, font: ‘Calibri’, color: ‘C77D0A’ })], spacing: { before: 200, after: 60 } })); children.push(new Paragraph({ children: [new TextRun({ text: meal.meatTip, size: 20, font: ‘Calibri’, italics: true })], spacing: { after: 100 } })); }
-if (meal.toddlerAdjust) { children.push(new Paragraph({ children: [new TextRun({ text: ‘\uD83D\uDC76 Toddler Adjustment’, bold: true, size: 20, font: ‘Calibri’, color: ‘2E6B8A’ })], spacing: { before: 100, after: 60 } })); children.push(new Paragraph({ children: [new TextRun({ text: meal.toddlerAdjust, size: 20, font: ‘Calibri’, italics: true })], spacing: { after: 100 } })); }
-if (meal.tips) { children.push(new Paragraph({ children: [new TextRun({ text: ‘\uD83D\uDCA1 Tips’, bold: true, size: 20, font: ‘Calibri’, color: ‘3D7A3F’ })], spacing: { before: 100, after: 60 } })); children.push(new Paragraph({ children: [new TextRun({ text: meal.tips, size: 20, font: ‘Calibri’, italics: true })], spacing: { after: 100 } })); }
-if (meal.leftoverHandling) { children.push(new Paragraph({ children: [new TextRun({ text: ‘\uD83D\uDCE6 Leftover Handling’, bold: true, size: 20, font: ‘Calibri’, color: ‘C2703A’ })], spacing: { before: 100, after: 60 } })); children.push(new Paragraph({ children: [new TextRun({ text: meal.leftoverHandling, size: 20, font: ‘Calibri’, italics: true })], spacing: { after: 100 } })); }
+meal.steps.forEach((step, si) => children.push(new Paragraph({ children: [new TextRun({ text: `${si+1}. ${step}`, size: 20, font: ‘Calibri’ })], spacing: { after: 80 } })));
+const sections = [[‘meatTip’,‘🥩 Meat Prep Tip’,‘C77D0A’],[‘toddlerAdjust’,‘👶 Toddler Adjustment’,‘2E6B8A’],[‘tips’,‘💡 Tips’,‘3D7A3F’],[‘leftoverHandling’,‘📦 Leftover Handling’,‘C2703A’]];
+sections.forEach(([key, label, color]) => {
+if (meal[key]) {
+children.push(new Paragraph({ children: [new TextRun({ text: label, bold: true, size: 20, font: ‘Calibri’, color })], spacing: { before: 200, after: 60 } }));
+children.push(new Paragraph({ children: [new TextRun({ text: meal[key], size: 20, font: ‘Calibri’, italics: true })], spacing: { after: 100 } }));
+}
+});
 });
 const doc = new Document({ sections: [{ children }] });
 Packer.toBlob(doc).then(blob => { saveAs(blob, ‘recipe-pack.docx’); toast(‘Recipe pack exported’, ‘success’); });
@@ -873,12 +928,12 @@ Packer.toBlob(doc).then(blob => { saveAs(blob, ‘recipe-pack.docx’); toast(�
 function switchTab(tabId) {
 document.querySelectorAll(’.tab-btn’).forEach(b => b.classList.remove(‘active’));
 document.querySelectorAll(’.tab-panel’).forEach(p => p.classList.remove(‘active’));
-document.querySelector(’[data-tab=”’ + tabId + ‘”]’)?.classList.add(‘active’);
+document.querySelector(`[data-tab="${tabId}"]`)?.classList.add(‘active’);
 document.getElementById(‘panel-’ + tabId)?.classList.add(‘active’);
 }
 
 // ============================================================
-// MAIN SESSION FLOW
+// MAIN SESSION FLOW — AI ONLY, NO FALLBACK
 // ============================================================
 
 async function startFortnight() {
@@ -886,27 +941,27 @@ const farmersText = document.getElementById(‘farmersPickInput’).value;
 const meatText = document.getElementById(‘meatInput’).value;
 const leftoversText = document.getElementById(‘leftoversInput’).value;
 const dislikesText = document.getElementById(‘dislikesInput’).value;
+
 if (!farmersText.trim() && !meatText.trim()) { toast(‘Please enter at least some produce or meat.’, ‘error’); return; }
 
 const delivery = farmersText.split(’\n’).map(parseQuantityLine).filter(Boolean);
 const meat = meatText.split(’\n’).map(parseQuantityLine).filter(Boolean);
 const leftovers = leftoversText.split(’\n’).map(parseQuantityLine).filter(Boolean);
-const dislikes = dislikesText;
 
 if (state.currentSession) { state.sessions.push({ …state.currentSession, archived: true, archivedAt: Date.now() }); save(‘sessions’, state.sessions); }
-state.currentSession = { id: generateId(), timestamp: Date.now(), delivery, meat, leftovers, dislikes, outputs: {} };
+state.currentSession = { id: generateId(), timestamp: Date.now(), delivery, meat, leftovers, dislikes: dislikesText, outputs: {} };
 
 generateStorageTable([…delivery, …leftovers]);
+showLoading(‘Claude is creating your fortnight meal plan…’);
 
-showLoading(‘Claude is creating your fortnight meal plan\u2026’);
 try {
-state.currentMealPlan = await generateMealPlanWithAI(delivery, meat, leftovers, dislikes);
-toast(’\u2728 Fortnight plan generated by Claude!’, ‘success’);
+state.currentMealPlan = await generateMealPlanWithAI(delivery, meat, leftovers, dislikesText);
 } catch (err) {
-console.error(‘AI generation failed:’, err);
-toast(‘Claude unavailable \u2014 using built-in recipe library as fallback.’, ‘error’);
-state.currentMealPlan = generateMealPlanFallback(delivery, meat, leftovers, dislikes);
-} finally { hideLoading(); }
+// Surface the error clearly — do not fall back to seed recipes
+showGenerationError(‘new’, err);
+return;
+}
+hideLoading();
 
 const allMeals = […state.currentMealPlan.week1, …state.currentMealPlan.week2].filter(Boolean);
 allMeals.forEach(m => state.mealHistory.push({ date: Date.now(), cuisine: m.cuisine, mexicanFlag: m.cuisine === ‘Mexican’, recipeId: m.id }));
@@ -916,6 +971,7 @@ generateShoppingList();
 saveCurrentSession();
 renderMealPlan(); renderRecipes(); renderRateNotes(); renderPantry();
 switchTab(‘mealPlan’);
+toast(‘✨ Fortnight plan generated by Claude!’, ‘success’);
 }
 
 function saveCurrentSession() { save(‘currentSession’, state.currentSession); save(‘currentMealPlan’, state.currentMealPlan); }
@@ -931,7 +987,7 @@ function loadSeedData() {
 document.getElementById(‘farmersPickInput’).value = SEED_FARMERS_PICK;
 document.getElementById(‘meatInput’).value = SEED_MEAT;
 document.getElementById(‘leftoversInput’).value = SEED_LEFTOVERS;
-toast(‘Sample data loaded \u2014 click “Generate Fortnight Plan”’, ‘info’);
+toast(‘Sample data loaded — click “Generate Fortnight Plan”’, ‘info’);
 }
 
 // ============================================================
